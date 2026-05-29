@@ -91,6 +91,9 @@ static uint32_t usbPacketsSeen = 0;
 static uint32_t blePacketsSent = 0;
 static uint32_t blePacketsSkipped = 0;
 static bool displayReady = false;
+static uint32_t lastMidiMs = 0;
+static char lastMidiText[32] = "none";
+static bool displayRefreshPending = true;
 
 static uint8_t midiLengthFromStatus(uint8_t status)
 {
@@ -185,6 +188,9 @@ static const char* statusName(uint8_t status)
     }
 }
 
+static void updateDisplayDashboard(bool force = false);
+static void markDisplayMidiEvent(const uint8_t* data);
+
 class UsbMidiInput : public USBConnection {
 public:
     void onDeviceConnected() override
@@ -228,6 +234,8 @@ public:
         } else {
             blePacketsSkipped++;
         }
+
+        markDisplayMidiEvent(data);
     }
 };
 
@@ -274,19 +282,7 @@ static void initDisplay()
         return;
     }
 
-    display->fillScreen(RGB565_BLACK);
-    display->fillRoundRect(8, 8, 224, 224, 12, RGB565_NAVY);
-    display->drawRoundRect(8, 8, 224, 224, 12, RGB565_CYAN);
-    display->fillRoundRect(18, 18, 204, 204, 8, RGB565_BLACK);
-
-    printDisplayLine(34, 30, 2, RGB565_CYAN, "USB MIDI");
-    printDisplayLine(28, 58, 3, RGB565_WHITE, "BRIDGE");
-    printDisplayLine(28, 100, 2, RGB565_GREENYELLOW, "READY TO JAM");
-    printDisplayLine(28, 138, 1, RGB565_LIGHTGRAY, "Bluetooth name:");
-    printDisplayLine(28, 154, 2, RGB565_GOLD, BLE_DEVICE_NAME);
-    printDisplayLine(28, 190, 1, RGB565_LIGHTGRAY, "USB: waiting");
-    printDisplayLine(28, 206, 1, RGB565_GOLD, "Power USB_DEV port");
-    printDisplayLine(28, 222, 1, RGB565_LIGHTGRAY, "BLE: advertising");
+    updateDisplayDashboard(true);
 }
 
 static void initBoardUsbHostPower()
@@ -316,18 +312,79 @@ static void initBoardUsbHostPower()
 
 static void updateDisplayStatus(bool usbConnected, bool bleConnected)
 {
+    (void)usbConnected;
+    (void)bleConnected;
+    displayRefreshPending = true;
+}
+
+static void markDisplayMidiEvent(const uint8_t* data)
+{
+    snprintf(lastMidiText,
+             sizeof(lastMidiText),
+             "%s ch%u %u %u",
+             statusName(data[1]),
+             (data[1] & 0x0F) + 1,
+             data[2],
+             data[3]);
+    lastMidiMs = millis();
+    displayRefreshPending = true;
+}
+
+static void printMetricLine(int16_t y, const char* label, const char* value, uint16_t valueColor)
+{
+    printDisplayLine(18, y, 1, RGB565_LIGHTGRAY, label);
+    printDisplayLine(82, y, 1, valueColor, value);
+}
+
+static void updateDisplayDashboard(bool force)
+{
     if (!displayReady) {
         return;
     }
 
-    display->fillRect(24, 188, 192, 42, RGB565_BLACK);
-    printDisplayLine(28, 190, 1, usbConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
-                     usbConnected ? "USB: MIDI connected" : "USB: waiting");
-    if (!usbConnected) {
-        printDisplayLine(28, 206, 1, RGB565_GOLD, "Power USB_DEV port");
+    static uint32_t lastDrawMs = 0;
+    if (!force && !displayRefreshPending && millis() - lastDrawMs < 500) {
+        return;
     }
-    printDisplayLine(28, 222, 1, bleConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
-                     bleConnected ? "BLE: connected" : "BLE: advertising");
+
+    lastDrawMs = millis();
+    displayRefreshPending = false;
+
+    const bool usbConnected = usbMidi.isConnected();
+    const bool bleConnected = bleMidi.isConnected();
+
+    char value[40] = {0};
+
+    display->fillScreen(RGB565_BLACK);
+    display->fillRoundRect(6, 6, 228, 228, 10, RGB565_NAVY);
+    display->drawRoundRect(6, 6, 228, 228, 10, RGB565_CYAN);
+    display->fillRoundRect(12, 12, 216, 216, 8, RGB565_BLACK);
+
+    printDisplayLine(22, 22, 2, RGB565_CYAN, "PIANO BLE");
+    printDisplayLine(22, 48, 1, RGB565_GOLD, BLE_DEVICE_NAME);
+
+    printMetricLine(72, "USB", usbConnected ? "MIDI connected" : "waiting", usbConnected ? RGB565_LIME : RGB565_GOLD);
+    printMetricLine(88, "BLE", bleConnected ? "connected" : "advertising", bleConnected ? RGB565_LIME : RGB565_GOLD);
+
+    snprintf(value, sizeof(value), "%lu", usbPacketsSeen);
+    printMetricLine(112, "USB pkt", value, usbPacketsSeen > 0 ? RGB565_LIME : RGB565_LIGHTGRAY);
+
+    snprintf(value, sizeof(value), "%lu sent / %lu skip", blePacketsSent, blePacketsSkipped);
+    printMetricLine(128, "BLE out", value, blePacketsSent > 0 ? RGB565_LIME : RGB565_LIGHTGRAY);
+
+    printDisplayLine(18, 154, 1, RGB565_LIGHTGRAY, "Last MIDI:");
+    printDisplayLine(18, 170, 1, lastMidiMs > 0 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
+
+    if (!usbConnected) {
+        printDisplayLine(18, 198, 1, RGB565_GOLD, "If BLE works but no notes:");
+        printDisplayLine(18, 214, 1, RGB565_GOLD, "power USB_DEV + use HOST");
+    } else if (usbPacketsSeen == 0) {
+        printDisplayLine(18, 206, 1, RGB565_GOLD, "Press piano keys now");
+    } else if (!bleConnected) {
+        printDisplayLine(18, 206, 1, RGB565_GOLD, "Connect iPad BLE MIDI");
+    } else {
+        printDisplayLine(18, 206, 1, RGB565_LIME, "Receiving and sending MIDI");
+    }
 }
 
 static void printStatusIfChanged()
@@ -354,7 +411,10 @@ static void printStatusIfChanged()
                       usbPacketsSeen,
                       blePacketsSent,
                       blePacketsSkipped);
+        displayRefreshPending = true;
     }
+
+    updateDisplayDashboard();
 }
 
 void setup()
