@@ -94,6 +94,7 @@ static bool displayReady = false;
 static uint32_t lastMidiMs = 0;
 static char lastMidiText[32] = "none";
 static bool displayRefreshPending = true;
+static bool displayStaticDrawn = false;
 
 static uint8_t midiLengthFromStatus(uint8_t status)
 {
@@ -282,6 +283,7 @@ static void initDisplay()
         return;
     }
 
+    displayStaticDrawn = false;
     updateDisplayDashboard(true);
 }
 
@@ -343,7 +345,11 @@ static void updateDisplayDashboard(bool force)
     }
 
     static uint32_t lastDrawMs = 0;
-    if (!force && !displayRefreshPending && millis() - lastDrawMs < 500) {
+    if (!force && millis() - lastDrawMs < 750) {
+        return;
+    }
+
+    if (!force && !displayRefreshPending) {
         return;
     }
 
@@ -353,37 +359,44 @@ static void updateDisplayDashboard(bool force)
     const bool usbConnected = usbMidi.isConnected();
     const bool bleConnected = bleMidi.isConnected();
 
-    char value[40] = {0};
+    if (!displayStaticDrawn || force) {
+        display->fillScreen(RGB565_BLACK);
+        display->fillRoundRect(6, 6, 228, 228, 10, RGB565_NAVY);
+        display->drawRoundRect(6, 6, 228, 228, 10, RGB565_CYAN);
+        display->fillRoundRect(12, 12, 216, 216, 8, RGB565_BLACK);
+        printDisplayLine(24, 20, 2, RGB565_CYAN, "PIANO BLE");
+        printDisplayLine(24, 44, 1, RGB565_GOLD, BLE_DEVICE_NAME);
+        displayStaticDrawn = true;
+    }
 
-    display->fillScreen(RGB565_BLACK);
-    display->fillRoundRect(6, 6, 228, 228, 10, RGB565_NAVY);
-    display->drawRoundRect(6, 6, 228, 228, 10, RGB565_CYAN);
-    display->fillRoundRect(12, 12, 216, 216, 8, RGB565_BLACK);
+    display->fillRect(18, 66, 204, 158, RGB565_BLACK);
 
-    printDisplayLine(22, 22, 2, RGB565_CYAN, "PIANO BLE");
-    printDisplayLine(22, 48, 1, RGB565_GOLD, BLE_DEVICE_NAME);
+    printDisplayLine(22, 70, 1, RGB565_LIGHTGRAY, "USB from Roland");
+    printDisplayLine(22, 84, 2, usbConnected ? RGB565_LIME : RGB565_GOLD,
+                     usbConnected ? "USB OK" : "USB WAIT");
 
-    printMetricLine(72, "USB", usbConnected ? "MIDI connected" : "waiting", usbConnected ? RGB565_LIME : RGB565_GOLD);
-    printMetricLine(88, "BLE", bleConnected ? "connected" : "advertising", bleConnected ? RGB565_LIME : RGB565_GOLD);
+    printDisplayLine(22, 112, 1, RGB565_LIGHTGRAY, "iPad Bluetooth");
+    printDisplayLine(22, 126, 2, bleConnected ? RGB565_LIME : RGB565_GOLD,
+                     bleConnected ? "BLE OK" : "BLE READY");
 
-    snprintf(value, sizeof(value), "%lu", usbPacketsSeen);
-    printMetricLine(112, "USB pkt", value, usbPacketsSeen > 0 ? RGB565_LIME : RGB565_LIGHTGRAY);
+    char value[48] = {0};
+    snprintf(value, sizeof(value), "Notes: %lu", usbPacketsSeen);
+    printDisplayLine(22, 156, 1, usbPacketsSeen > 0 ? RGB565_LIME : RGB565_LIGHTGRAY, value);
 
-    snprintf(value, sizeof(value), "%lu sent / %lu skip", blePacketsSent, blePacketsSkipped);
-    printMetricLine(128, "BLE out", value, blePacketsSent > 0 ? RGB565_LIME : RGB565_LIGHTGRAY);
+    snprintf(value, sizeof(value), "Sent: %lu  Skip: %lu", blePacketsSent, blePacketsSkipped);
+    printDisplayLine(22, 172, 1, blePacketsSent > 0 ? RGB565_LIME : RGB565_LIGHTGRAY, value);
 
-    printDisplayLine(18, 154, 1, RGB565_LIGHTGRAY, "Last MIDI:");
-    printDisplayLine(18, 170, 1, lastMidiMs > 0 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
+    printDisplayLine(22, 192, 1, RGB565_LIGHTGRAY, "Last:");
+    printDisplayLine(58, 192, 1, lastMidiMs > 0 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
 
     if (!usbConnected) {
-        printDisplayLine(18, 198, 1, RGB565_GOLD, "If BLE works but no notes:");
-        printDisplayLine(18, 214, 1, RGB565_GOLD, "power USB_DEV + use HOST");
+        printDisplayLine(22, 212, 1, RGB565_GOLD, "Use HOST + power USB_DEV");
     } else if (usbPacketsSeen == 0) {
-        printDisplayLine(18, 206, 1, RGB565_GOLD, "Press piano keys now");
+        printDisplayLine(22, 212, 1, RGB565_GOLD, "Press keys to test");
     } else if (!bleConnected) {
-        printDisplayLine(18, 206, 1, RGB565_GOLD, "Connect iPad BLE MIDI");
+        printDisplayLine(22, 212, 1, RGB565_GOLD, "Connect app to BLE");
     } else {
-        printDisplayLine(18, 206, 1, RGB565_LIME, "Receiving and sending MIDI");
+        printDisplayLine(22, 212, 1, RGB565_LIME, "MIDI is flowing");
     }
 }
 
