@@ -390,7 +390,8 @@ static void updateDisplayDashboard(bool force)
     printDisplayLine(58, 192, 1, lastMidiMs > 0 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
 
     if (!usbConnected) {
-        printDisplayLine(22, 212, 1, RGB565_GOLD, "Use HOST + power USB_DEV");
+        printDisplayLine(22, 212, 1, RGB565_GOLD,
+                         usbMidi.getLastError().length() > 0 ? "Check Roland USB mode" : "Use HOST + power USB_DEV");
     } else if (usbPacketsSeen == 0) {
         printDisplayLine(22, 212, 1, RGB565_GOLD, "Press keys to test");
     } else if (!bleConnected) {

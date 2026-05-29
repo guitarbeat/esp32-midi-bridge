@@ -6,16 +6,6 @@
 #include "USBConnection.h"
 #include <string.h>
 
-static bool isValidMidiMessage(const uint8_t* midiData, size_t length) {
-    if (length < 2) return false;
-    if ((midiData[0] & 0x80) == 0) return false;
-    uint8_t status = midiData[0] & 0xF0;
-    if (status == 0xC0 || status == 0xD0)
-        return (length >= 2);
-    else
-        return (length >= 3);
-}
-
 USBConnection::USBConnection()
   : isReady(false),
     interval(0),
@@ -189,8 +179,12 @@ void USBConnection::_clientEventCallback(const usb_host_client_event_msg_t *even
                 }
                 usbCon->_processConfig(config_desc);
             }
-            usbCon->lastError = "";
-            usbCon->onDeviceConnected();
+            if (usbCon->isReady) {
+                usbCon->lastError = "";
+                usbCon->onDeviceConnected();
+            } else if (usbCon->lastError.length() == 0) {
+                usbCon->lastError = "No USB MIDIStreaming bulk IN endpoint found";
+            }
             break;
         case USB_HOST_CLIENT_EVENT_DEV_GONE:
             usbCon->isReady = false;
@@ -264,9 +258,8 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
                                 uint8_t bInterval = p[idx2 + 6];
                                 if (wMaxPacketSize > 512) wMaxPacketSize = 512;
                                 if (wMaxPacketSize == 0) wMaxPacketSize = 64;
-                                if (bEndpointAddress & 0x80) {
-                                    uint8_t transferType = bmAttributes & 0x03;
-                                    uint32_t timeout = (transferType == 0x02) ? 3000 : 0;
+                                if ((bEndpointAddress & 0x80) && ((bmAttributes & 0x03) == 0x02)) {
+                                    uint32_t timeout = 3000;
                                     esp_err_t e2 = usb_host_transfer_alloc(wMaxPacketSize, timeout, &midiTransfer);
                                     if (e2 == ESP_OK && midiTransfer != nullptr) {
                                         midiTransfer->device_handle = deviceHandle;
@@ -278,9 +271,11 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
                                         isReady = true;
                                         claimedOk = true;
                                         transferInFlight = true;
-                                        vTaskDelay(pdMS_TO_TICKS(200)); // Delay for CT-S1 before first transfer
-                                        usb_host_transfer_submit(midiTransfer);  // first transfer after setup
+                                        vTaskDelay(pdMS_TO_TICKS(200));
+                                        usb_host_transfer_submit(midiTransfer);
                                         return;
+                                    } else {
+                                        lastError = "MIDI IN transfer allocation failed (err=" + String(e2) + ")";
                                     }
                                 }
                             }
@@ -293,19 +288,7 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
         }
         index += len;
     }
-    if (!claimedOk) {
-        // Fallback: try a default endpoint with safe size
-        esp_err_t err = usb_host_transfer_alloc(64, 3000, &midiTransfer);
-        if (err == ESP_OK && midiTransfer != nullptr) {
-            midiTransfer->device_handle = deviceHandle;
-            midiTransfer->bEndpointAddress = 0x81;
-            midiTransfer->callback = _onReceive;
-            midiTransfer->context = this;
-            midiTransfer->num_bytes = 64;
-            interval = 1;
-            isReady = true;
-            transferInFlight = true;
-            usb_host_transfer_submit(midiTransfer);
-        }
+    if (!claimedOk && lastError.length() == 0) {
+        lastError = "No USB MIDIStreaming bulk IN endpoint found";
     }
 }
