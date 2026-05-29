@@ -53,6 +53,10 @@ For a USB MIDI device on the Type-A host port, the board also needs a 5 V source
 on the USB device/power path or battery power; Micro-USB debug power alone does
 not power every external host-device setup.
 
+If Bluetooth connects but no MIDI arrives, check this first: the bridge firmware
+can run from Micro-USB debug power while the Type-A `USB HOST` port has no VBUS
+for the piano. Power the `USB_DEV` port or use battery power.
+
 ## Hardware Reality Check
 
 The observed webflasher output reports `Chip type ESP32`, which is a classic ESP32. It can run BLE MIDI, but it cannot directly host a USB MIDI keyboard from its onboard USB/serial connector. Use either:

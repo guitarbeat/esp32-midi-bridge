@@ -280,8 +280,9 @@ static void initDisplay()
     printDisplayLine(28, 100, 2, RGB565_GREENYELLOW, "READY TO JAM");
     printDisplayLine(28, 138, 1, RGB565_LIGHTGRAY, "Bluetooth name:");
     printDisplayLine(28, 154, 2, RGB565_GOLD, BLE_DEVICE_NAME);
-    printDisplayLine(28, 198, 1, RGB565_LIGHTGRAY, "USB: waiting");
-    printDisplayLine(28, 214, 1, RGB565_LIGHTGRAY, "BLE: advertising");
+    printDisplayLine(28, 190, 1, RGB565_LIGHTGRAY, "USB: waiting");
+    printDisplayLine(28, 206, 1, RGB565_GOLD, "Power USB_DEV port");
+    printDisplayLine(28, 222, 1, RGB565_LIGHTGRAY, "BLE: advertising");
 }
 
 static void initBoardUsbHostPower()
@@ -315,10 +316,13 @@ static void updateDisplayStatus(bool usbConnected, bool bleConnected)
         return;
     }
 
-    display->fillRect(24, 194, 192, 34, RGB565_BLACK);
-    printDisplayLine(28, 198, 1, usbConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
+    display->fillRect(24, 188, 192, 42, RGB565_BLACK);
+    printDisplayLine(28, 190, 1, usbConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
                      usbConnected ? "USB: MIDI connected" : "USB: waiting");
-    printDisplayLine(28, 214, 1, bleConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
+    if (!usbConnected) {
+        printDisplayLine(28, 206, 1, RGB565_GOLD, "Power USB_DEV port");
+    }
+    printDisplayLine(28, 222, 1, bleConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
                      bleConnected ? "BLE: connected" : "BLE: advertising");
 }
 
