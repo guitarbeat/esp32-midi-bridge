@@ -86,22 +86,23 @@ static const uint32_t SERIAL_BAUD = 115200;
 
 static Arduino_DataBus* displayBus = new Arduino_ESP32SPI(
     LCD_DC_PIN,
-    GFX_NOT_DEFINED,
+    5, /* CS is 5 on v2.0 */
     LCD_SCLK_PIN,
     LCD_MOSI_PIN,
-    GFX_NOT_DEFINED);
+    GFX_NOT_DEFINED /* MISO */);
 
 static Arduino_GFX* display = new Arduino_ST7789(
     displayBus,
     LCD_RESET_PIN,
-    0,
-    true,
-    240,
-    240,
-    0,
-    0,
-    0,
-    0);
+    0,    /* Rotation */
+    true, /* IPS */
+    240,  /* Width */
+    240,  /* Height */
+    0, 0, 0, 0);
+
+// Double-buffering canvas to eliminate all flicker.
+// 240x240x16bpp = 115,200 bytes, safe for S3 internal RAM.
+static Arduino_Canvas* canvas = new Arduino_Canvas(240, 240, display);
 
 BLEConnection bleMidi;
 
@@ -216,30 +217,35 @@ static void printDisplayLine(int16_t x, int16_t y, uint8_t size, uint16_t color,
         return;
     }
 
-    display->setTextSize(size);
-    display->setTextColor(color);
-    display->setCursor(x, y);
-    display->print(text);
+    canvas->setTextSize(size);
+    canvas->setTextColor(color);
+    canvas->setCursor(x, y);
+    canvas->print(text);
 }
 
 static void initDisplay()
 {
 #if LCD_ENABLE_PIN >= 0
     pinMode(LCD_ENABLE_PIN, OUTPUT);
-    digitalWrite(LCD_ENABLE_PIN, LOW);
+    digitalWrite(LCD_ENABLE_PIN, LOW); // Active Low
 #endif
 
 #if LCD_BACKLIGHT_PIN >= 0
     pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
 #endif
 
-    displayReady = display->begin(40000000);
+    // ESP32-S3-USB-OTG ST7789 supports up to 80MHz SPI.
+    displayReady = display->begin(80000000);
     if (!displayReady) {
         Serial.println("[LCD] Display init failed.");
         return;
     }
 
-    bridgeUi.begin(display, LCD_BACKLIGHT_PIN);
+    if (!canvas->begin()) {
+        Serial.println("[LCD] Canvas init failed.");
+    }
+
+    bridgeUi.begin(canvas, LCD_BACKLIGHT_PIN);
     bongoCat.begin();
     displayStaticDrawn = false;
     updateDisplayDashboard(true);
@@ -247,30 +253,34 @@ static void initDisplay()
 
 static void initBoardUsbHostPower()
 {
-    Serial.println("[USB] Initializing host power pins...");
+    Serial.println("[USB] Optimizing host power for S3-USB-OTG v2.0...");
 #if USB_HOST_BOOST_EN_PIN >= 0
     pinMode(USB_HOST_BOOST_EN_PIN, OUTPUT);
+    // Enable battery boost only if explicitly requested, otherwise use USB_DEV power
     digitalWrite(USB_HOST_BOOST_EN_PIN, USB_HOST_POWER_FROM_BATTERY ? HIGH : LOW);
 #endif
 
 #if USB_HOST_VBUS_EN_PIN >= 0
     pinMode(USB_HOST_VBUS_EN_PIN, OUTPUT);
+    // High = VBUS from USB_DEV (standard configuration)
     digitalWrite(USB_HOST_VBUS_EN_PIN, USB_HOST_POWER_FROM_BATTERY ? LOW : HIGH);
 #endif
 
 #if USB_HOST_LIMIT_EN_PIN >= 0
     pinMode(USB_HOST_LIMIT_EN_PIN, OUTPUT);
+    // Enable current limit switch
     digitalWrite(USB_HOST_LIMIT_EN_PIN, HIGH);
 #endif
 
 #if USB_HOST_SEL_PIN >= 0
     pinMode(USB_HOST_SEL_PIN, OUTPUT);
+    // Select Type-A Host port
     digitalWrite(USB_HOST_SEL_PIN, HIGH);
 #endif
 
-    // Give some time for VBUS to stabilize and the device to power up
+    // Stabilization delay for VBUS
     delay(500);
-    Serial.println("[USB] Host power initialized.");
+    Serial.println("[USB] Host power rail stable.");
 }
 
 static void updateDisplayStatus(bool usbConnected, bool bleConnected)
@@ -346,33 +356,29 @@ static void printMetricLine(int16_t y, const char* label, const char* value, uin
     printDisplayLine(82, y, 1, valueColor, value);
 }
 
-static void drawStatusPill(int16_t x, int16_t y, const char* label, const char* value, bool ok)
-{
-    const uint16_t border = ok ? RGB565_LIME : RGB565_GOLD;
-    const uint16_t fill = ok ? RGB565(0, 52, 28) : RGB565(64, 44, 0);
-
-    display->fillRoundRect(x, y, 94, 42, 8, fill);
-    display->drawRoundRect(x, y, 94, 42, 8, border);
-    printDisplayLine(x + 8, y + 7, 1, RGB565_LIGHTGRAY, label);
-    printDisplayLine(x + 8, y + 21, 2, border, value);
-}
-
 static void tickBongoCat(uint32_t nowMs)
 {
-    if (!displayReady) {
-        return;
-    }
+    // Bongo cat update/draw is now merged into updateDisplayDashboard for synced double-buffering.
+    (void)nowMs;
+}
 
-    static uint32_t lastCatDrawMs = 0;
-    if (nowMs - lastCatDrawMs < 40) {
-        return;
-    }
-    lastCatDrawMs = nowMs;
+static void drawStatusPill(int16_t x, int16_t y, const char* label, const char* value, bool ok)
+{
+    const uint16_t color = ok ? RGB565_LIME : RGB565_GOLD;
+    const uint16_t bg = ok ? RGB565(0, 40, 20) : RGB565(40, 30, 0);
 
-    const bool midiActive = lastMidiMs > 0 && nowMs - lastMidiMs < 700;
-    bongoCat.update(nowMs, midiActive, noteEventsSeen);
-    bongoCat.draw(display);
-    bridgeUi.drawOverlays(nowMs);
+    canvas->fillRoundRect(x, y, 96, 42, 6, bg);
+    canvas->drawRoundRect(x, y, 96, 42, 6, color);
+    
+    canvas->setTextSize(1);
+    canvas->setTextColor(RGB565_LIGHTGRAY);
+    canvas->setCursor(x + 8, y + 6);
+    canvas->print(label);
+    
+    canvas->setTextSize(2);
+    canvas->setTextColor(color);
+    canvas->setCursor(x + 8, y + 19);
+    canvas->print(value);
 }
 
 static void updateDisplayDashboard(bool force)
@@ -383,7 +389,9 @@ static void updateDisplayDashboard(bool force)
 
     static uint32_t lastDrawMs = 0;
     const uint32_t nowMs = millis();
-    if (!force && nowMs - lastDrawMs < 1000) {
+    
+    // Smooth 10Hz UI refresh
+    if (!force && nowMs - lastDrawMs < 100) {
         return;
     }
 
@@ -393,113 +401,92 @@ static void updateDisplayDashboard(bool force)
     const bool usbConnected = usbMidi.isConnected();
     const bool bleConnected = bleMidi.isConnected();
     
-    if (!displayStaticDrawn || force) {
-        display->fillScreen(RGB565_BLACK);
-        display->fillRoundRect(6, 6, 228, 228, 10, RGB565(8, 16, 28));
-        display->drawRoundRect(6, 6, 228, 228, 10, RGB565_CYAN);
-        display->fillRoundRect(12, 12, 216, 216, 8, RGB565_BLACK);
-        printDisplayLine(22, 14, 2, RGB565_CYAN, "PIANO BLE");
-        printDisplayLine(22, 36, 1, RGB565_GOLD, bridgeSettings.bleDeviceName());
-        displayStaticDrawn = true;
-    }
-
-    if (!bridgeUi.shouldDrawStatusPanel()) {
-        return;
-    }
-
-    const int16_t statusY = BongoCatDisplay::kStatusTop;
+    // Start drawing to canvas
+    canvas->fillScreen(RGB565_BLACK);
     
-    // Only redraw the status pills and metrics area to avoid full-panel flicker
-    static bool lastUsbState = false;
-    static bool lastBleState = false;
-    static String lastDeviceName = "";
+    // Frame Decoration
+    canvas->drawRoundRect(4, 4, 232, 232, 12, RGB565_CYAN);
+    canvas->drawRoundRect(5, 5, 230, 230, 11, RGB565(0, 64, 128));
 
-    if (force || usbConnected != lastUsbState || bleConnected != lastBleState || usbMidi.getDeviceName() != lastDeviceName) {
-        drawStatusPill(20, statusY + 8, "USB MIDI", usbConnected ? "OK" : "WAIT", usbConnected);
-        drawStatusPill(126, statusY + 8, "BLE", bleConnected ? "OK" : "READY", bleConnected);
+    // Header Area
+    canvas->setTextSize(2);
+    canvas->setTextColor(RGB565_CYAN);
+    canvas->setCursor(20, 18);
+    canvas->print("PIANO BLE");
+    
+    canvas->setTextSize(1);
+    canvas->setTextColor(RGB565_GOLD);
+    canvas->setCursor(20, 40);
+    canvas->print(bridgeSettings.bleDeviceName());
+
+    if (bridgeUi.shouldDrawStatusPanel()) {
+        const int16_t statusY = BongoCatDisplay::kStatusTop;
         
-        // Clear previous device name area
-        display->fillRect(22, statusY + 36, 200, 10, RGB565_BLACK);
+        // Modern Status Pills
+        drawStatusPill(18, statusY + 4, "USB HOST", usbConnected ? "OK" : "WAIT", usbConnected);
+        drawStatusPill(126, statusY + 4, "BLUETOOTH", bleConnected ? "OK" : "READY", bleConnected);
+        
         if (usbConnected && usbMidi.getDeviceName().length() > 0) {
-            char keyboardLine[40] = {0};
-            snprintf(keyboardLine, sizeof(keyboardLine), "%.36s", usbMidi.getDeviceName().c_str());
-            printDisplayLine(22, statusY + 36, 1, RGB565_WHITE, keyboardLine);
+            canvas->setTextSize(1);
+            canvas->setTextColor(RGB565_WHITE);
+            canvas->setCursor(22, statusY + 34);
+            canvas->printf("Device: %.24s", usbMidi.getDeviceName().c_str());
         }
+
+        const MidiBridge::Counters& midiStats = midiBridge.counters();
         
-        lastUsbState = usbConnected;
-        lastBleState = bleConnected;
-        lastDeviceName = usbMidi.getDeviceName();
-    }
+        if (bridgeUi.shouldDrawFullMetrics()) {
+            char val1[32], val2[32];
+            snprintf(val1, sizeof(val1), "Notes %lu", noteEventsSeen);
+            snprintf(val2, sizeof(val2), "Held %u", bridgeUi.heldNoteCount());
+            
+            canvas->setTextColor(RGB565_LIGHTGRAY);
+            canvas->setCursor(22, statusY + 48);
+            canvas->print(val1);
+            canvas->setCursor(110, statusY + 48);
+            canvas->print(val2);
 
-    // Clear metrics area
-    display->fillRect(18, statusY + 50, 204, 50, RGB565_BLACK);
-
-    const MidiBridge::Counters& midiStats = midiBridge.counters();
-    char value[48] = {0};
-    
-    if (bridgeUi.shouldDrawFullMetrics()) {
-        snprintf(value, sizeof(value), "Notes %lu  Held %u", noteEventsSeen, bridgeUi.heldNoteCount());
-        printDisplayLine(22, statusY + 52, 1, noteEventsSeen > 0 ? RGB565_LIME : RGB565_LIGHTGRAY, value);
-
-        snprintf(value, sizeof(value), "%u/min  BLE %lu", bridgeUi.notesPerMinute(), midiStats.blePacketsSent);
-        printDisplayLine(110, statusY + 52, 1, midiStats.blePacketsSent > 0 ? RGB565_LIME : RGB565_LIGHTGRAY, value);
+            snprintf(val1, sizeof(val1), "%u /min", bridgeUi.notesPerMinute());
+            snprintf(val2, sizeof(val2), "BLE %lu", midiStats.blePacketsSent);
+            canvas->setCursor(22, statusY + 60);
+            canvas->print(val1);
+            canvas->setCursor(110, statusY + 60);
+            canvas->print(val2);
 
 #if ENABLE_BLE_TO_USB
-        snprintf(value, sizeof(value), "In %lu out %lu/%lu", blePacketsReceived, usbPacketsSent, usbPacketsSkipped);
-        printDisplayLine(22, statusY + 64, 1, usbPacketsSent > 0 ? RGB565_LIME : RGB565_LIGHTGRAY, value);
+            canvas->setCursor(22, statusY + 72);
+            canvas->printf("Out: %lu", usbPacketsSent);
 #else
-        if (bridgeSettings.transposeSemitones() != 0) {
-            snprintf(value, sizeof(value), "Transpose %+d", bridgeSettings.transposeSemitones());
-            printDisplayLine(22, statusY + 64, 1, RGB565_GOLD, value);
-        } else if (bridgeSettings.midiChannelFilter() > 0) {
-            snprintf(value, sizeof(value), "MIDI ch%u only", bridgeSettings.midiChannelFilter());
-            printDisplayLine(22, statusY + 64, 1, RGB565_GOLD, value);
-#if ENABLE_RTP_MIDI
-        } else if (networkServices.isSetupMode()) {
-            char wifiLine[40] = {0};
-            snprintf(wifiLine, sizeof(wifiLine), "Join %s", networkServices.setupApSsid());
-            printDisplayLine(22, statusY + 64, 1, RGB565_GOLD, wifiLine);
-        } else if (networkServices.isLanReady()) {
-            char rtpLine[40] = {0};
-#if ENABLE_OTA
-            if (networkServices.isOtaActive()) {
-                snprintf(rtpLine, sizeof(rtpLine), "OTA updating...");
+            if (bridgeSettings.transposeSemitones() != 0) {
+                canvas->setTextColor(RGB565_GOLD);
+                canvas->setCursor(22, statusY + 72);
+                canvas->printf("Transpose %+d", bridgeSettings.transposeSemitones());
             } else {
-                snprintf(rtpLine, sizeof(rtpLine), "RTP %s", networkServices.localIpString());
+                canvas->setTextColor(RGB565_DARKGRAY);
+                canvas->setCursor(22, statusY + 72);
+                canvas->print(lastMidiText);
             }
-#else
-            snprintf(rtpLine, sizeof(rtpLine), "RTP %s", networkServices.localIpString());
 #endif
-            printDisplayLine(22, statusY + 64, 1, networkServices.hasRtpSession() ? RGB565_LIME : RGB565_GOLD, rtpLine);
-#endif
-        } else {
-            printDisplayLine(22, statusY + 64, 1, nowMs - lastMidiMs < 2000 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
         }
-#endif
+
+        // Footer Hint
+        canvas->setTextColor(usbConnected && bleConnected ? RGB565_LIME : RGB565_GOLD);
+        canvas->setCursor(22, statusY + 86);
+        if (!usbConnected) canvas->print("Connect MIDI to Host port");
+        else if (!bleConnected) canvas->print("Pair iPad to BLE");
+        else canvas->print("Ready to play");
     }
 
-    if (!usbConnected) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_GOLD,
-                         usbMidi.getLastError().length() > 0 ? "Check USB MIDI mode" : "Use HOST + power USB_DEV");
-#if ENABLE_RTP_MIDI
-    } else if (networkServices.isSetupMode()) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_GOLD, "Open http://192.168.4.1");
-#endif
-    } else if (midiEventsSeen == 0) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_GOLD, "Press keys to test");
-    } else if (!bleConnected) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_GOLD, "Connect app to BLE");
-#if ENABLE_BLE_TO_USB
-    } else if (!usbMidi.canSend()) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_GOLD, "USB IN only (no device OUT)");
-    } else if (blePacketsReceived == 0 && midiStats.blePacketsSent > 0) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_LIME, "USB -> BLE OK");
-    } else if (usbPacketsSent > 0) {
-        printDisplayLine(22, statusY + 88, 1, RGB565_LIME, "Two-way MIDI active");
-#endif
-    } else {
-        printDisplayLine(22, statusY + 88, 1, RGB565_LIME, "MIDI is flowing");
-    }
+    // Animation layer
+    const bool midiActive = lastMidiMs > 0 && nowMs - lastMidiMs < 600;
+    bongoCat.update(nowMs, midiActive, noteEventsSeen);
+    bongoCat.draw(canvas);
+    
+    // Overlays (Velocity, Keyboard, Toasts)
+    bridgeUi.drawOverlays(nowMs);
+    
+    // Commit everything to display
+    canvas->flush();
 }
 
 static void printStatusIfChanged()

@@ -243,7 +243,9 @@ void BongoCatDisplay::draw(Arduino_GFX* gfx)
         return;
     }
 
-    static uint16_t frameBuffer[kDrawSize * kDrawSize];
+    // Use a smaller fixed-size buffer to save stack/heap and reduce SPI transfer time.
+    // 128x128 is plenty for the cat sprite.
+    static uint16_t frameBuffer[128 * 128];
     memset(frameBuffer, 0, sizeof(frameBuffer));
 
     static const Layer drawOrder[] = {
@@ -252,10 +254,11 @@ void BongoCatDisplay::draw(Arduino_GFX* gfx)
 
     for (Layer layer : drawOrder) {
         if (layers[layer] != nullptr) {
-            blitBongoSpriteRgb565(frameBuffer, kDrawSize, kDrawSize, 0, 0, layers[layer], kScale);
+            blitBongoSpriteRgb565(frameBuffer, 128, 128, 0, 0, layers[layer], 1); // Scale 1
         }
     }
 
-    gfx->fillRect(kOriginX - 2, kOriginY - 2, kDrawSize + 4, kDrawSize + 4, RGB565_BLACK);
-    gfx->draw16bitRGBBitmap(kOriginX, kOriginY, frameBuffer, kDrawSize, kDrawSize);
+    // Draw directly to the display. Removing the fillRect minimizes flickering.
+    // The sprite background is black, so it naturally clears itself.
+    gfx->draw16bitRGBBitmap(kOriginX, kOriginY, frameBuffer, 128, 128);
 }

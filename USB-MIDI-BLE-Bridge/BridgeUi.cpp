@@ -407,9 +407,20 @@ void BridgeUi::drawMiniKeyboard()
         return;
     }
 
-    const int16_t keyW = kKeyboardW / kKeyboardKeyCount;
-    gfx->fillRect(kKeyboardX, kKeyboardY, kKeyboardW, kKeyboardH, RGB565(12, 12, 20));
+    static bool lastHeldNotes[kKeyboardKeyCount] = {false};
+    bool changed = false;
+    for (uint8_t i = 0; i < kKeyboardKeyCount; i++) {
+        const bool held = kKeyboardFirstNote + i < 128 && heldNotes[kKeyboardFirstNote + i];
+        if (held != lastHeldNotes[i]) {
+            changed = true;
+            lastHeldNotes[i] = held;
+        }
+    }
 
+    if (!changed) return;
+
+    const int16_t keyW = kKeyboardW / kKeyboardKeyCount;
+    // Don't clear the whole bar, just redraw individual keys
     for (uint8_t i = 0; i < kKeyboardKeyCount; i++) {
         const uint8_t note = kKeyboardFirstNote + i;
         const bool blackKey = ((i + 1) % 12 == 2 || (i + 1) % 12 == 4 || (i + 1) % 12 == 7 ||
@@ -420,6 +431,8 @@ void BridgeUi::drawMiniKeyboard()
         gfx->fillRect(x + 1, kKeyboardY + 1, keyW - 2, kKeyboardH - 2, fill);
         if (held) {
             gfx->drawRect(x, kKeyboardY, keyW, kKeyboardH, RGB565_LIME);
+        } else {
+            gfx->drawRect(x, kKeyboardY, keyW, kKeyboardH, RGB565(48, 48, 64));
         }
     }
 }
@@ -430,12 +443,19 @@ void BridgeUi::drawVelocityBar()
         return;
     }
 
+    static uint8_t lastDrawnVelocity = 0;
+    if (lastVelocity_ == lastDrawnVelocity) return;
+    lastDrawnVelocity = lastVelocity_;
+
     constexpr int16_t barX = 186;
     constexpr int16_t barY = 14;
     constexpr int16_t barW = 44;
     constexpr int16_t barH = 10;
 
     gfx->drawRect(barX, barY, barW, barH, RGB565(48, 48, 64));
+    // Clear inner
+    gfx->fillRect(barX + 1, barY + 1, barW - 2, barH - 2, RGB565_BLACK);
+    
     const int16_t fillW = (static_cast<int16_t>(lastVelocity_) * (barW - 2)) / 127;
     if (fillW > 0) {
         const uint16_t color = lastVelocity_ > 100 ? RGB565(255, 96, 64) : RGB565(64, 160, 255);
