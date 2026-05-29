@@ -10,7 +10,10 @@
 #endif
 
 #include <Arduino_GFX_Library.h>
+#include <esp_log.h>
 #include "USBConnection.h"
+
+static const char* TAG = "PianoBridge";
 #include "BLEConnection.h"
 #include "bongo_cat/BongoCat.h"
 #include "BridgeUi.h"
@@ -146,6 +149,42 @@ public:
 
 UsbMidiInput usbMidi;
 
+// Diagnostics task handles
+static TaskHandle_t diagTaskHandle = nullptr;
+static TaskHandle_t midiTaskHandle = nullptr;
+
+static void monitorSystemResources(void* arg)
+{
+    (void)arg;
+    for (;;) {
+        const uint32_t freeHeap = esp_get_free_heap_size();
+        const uint32_t minFreeHeap = esp_get_minimum_free_heap_size();
+        
+        ESP_LOGI("DIAG", "Heap: %lu B (min %lu)", freeHeap, minFreeHeap);
+        
+        // Check stack high water marks
+        if (diagTaskHandle) ESP_LOGI("DIAG", "Stack Diag: %u", uxTaskGetStackHighWaterMark(diagTaskHandle));
+        if (midiTaskHandle) ESP_LOGI("DIAG", "Stack MIDI: %u", uxTaskGetStackHighWaterMark(midiTaskHandle));
+        if (usbMidi.getTaskHandle()) ESP_LOGI("DIAG", "Stack USB: %u", uxTaskGetStackHighWaterMark(usbMidi.getTaskHandle()));
+        
+        vTaskDelay(pdMS_TO_TICKS(10000));
+    }
+}
+
+static void midiProcessingTask(void* arg)
+{
+    (void)arg;
+    for (;;) {
+        usbMidi.task();
+        bleMidi.task();
+#if ENABLE_RTP_MIDI
+        networkServices.task();
+#endif
+        // Small yield to prevent starving lower priority tasks on Core 1 if loop is tight
+        vTaskDelay(1); 
+    }
+}
+
 #if ENABLE_BLE_TO_USB
 static void onBleMidiReceived(const uint8_t* data, size_t length)
 {
@@ -208,6 +247,7 @@ static void initDisplay()
 
 static void initBoardUsbHostPower()
 {
+    Serial.println("[USB] Initializing host power pins...");
 #if USB_HOST_BOOST_EN_PIN >= 0
     pinMode(USB_HOST_BOOST_EN_PIN, OUTPUT);
     digitalWrite(USB_HOST_BOOST_EN_PIN, USB_HOST_POWER_FROM_BATTERY ? HIGH : LOW);
@@ -228,7 +268,9 @@ static void initBoardUsbHostPower()
     digitalWrite(USB_HOST_SEL_PIN, HIGH);
 #endif
 
-    delay(100);
+    // Give some time for VBUS to stabilize and the device to power up
+    delay(500);
+    Serial.println("[USB] Host power initialized.");
 }
 
 static void updateDisplayStatus(bool usbConnected, bool bleConnected)
@@ -340,16 +382,17 @@ static void updateDisplayDashboard(bool force)
     }
 
     static uint32_t lastDrawMs = 0;
-    if (!force && millis() - lastDrawMs < 750) {
+    const uint32_t nowMs = millis();
+    if (!force && nowMs - lastDrawMs < 1000) {
         return;
     }
 
-    lastDrawMs = millis();
+    lastDrawMs = nowMs;
     displayRefreshPending = false;
 
     const bool usbConnected = usbMidi.isConnected();
     const bool bleConnected = bleMidi.isConnected();
-    const uint32_t nowMs = millis();
+    
     if (!displayStaticDrawn || force) {
         display->fillScreen(RGB565_BLACK);
         display->fillRoundRect(6, 6, 228, 228, 10, RGB565(8, 16, 28));
@@ -365,19 +408,35 @@ static void updateDisplayDashboard(bool force)
     }
 
     const int16_t statusY = BongoCatDisplay::kStatusTop;
-    display->fillRect(18, statusY, 204, 240 - statusY - 12, RGB565_BLACK);
-    drawStatusPill(20, statusY + 8, "USB MIDI", usbConnected ? "OK" : "WAIT", usbConnected);
-    drawStatusPill(126, statusY + 8, "BLE", bleConnected ? "OK" : "READY", bleConnected);
+    
+    // Only redraw the status pills and metrics area to avoid full-panel flicker
+    static bool lastUsbState = false;
+    static bool lastBleState = false;
+    static String lastDeviceName = "";
 
-    if (usbConnected && usbMidi.getDeviceName().length() > 0) {
-        char keyboardLine[40] = {0};
-        snprintf(keyboardLine, sizeof(keyboardLine), "%.36s", usbMidi.getDeviceName().c_str());
-        printDisplayLine(22, statusY + 36, 1, RGB565_WHITE, keyboardLine);
+    if (force || usbConnected != lastUsbState || bleConnected != lastBleState || usbMidi.getDeviceName() != lastDeviceName) {
+        drawStatusPill(20, statusY + 8, "USB MIDI", usbConnected ? "OK" : "WAIT", usbConnected);
+        drawStatusPill(126, statusY + 8, "BLE", bleConnected ? "OK" : "READY", bleConnected);
+        
+        // Clear previous device name area
+        display->fillRect(22, statusY + 36, 200, 10, RGB565_BLACK);
+        if (usbConnected && usbMidi.getDeviceName().length() > 0) {
+            char keyboardLine[40] = {0};
+            snprintf(keyboardLine, sizeof(keyboardLine), "%.36s", usbMidi.getDeviceName().c_str());
+            printDisplayLine(22, statusY + 36, 1, RGB565_WHITE, keyboardLine);
+        }
+        
+        lastUsbState = usbConnected;
+        lastBleState = bleConnected;
+        lastDeviceName = usbMidi.getDeviceName();
     }
 
-    const MidiBridge::Counters& midiStats = midiBridge.counters();
+    // Clear metrics area
+    display->fillRect(18, statusY + 50, 204, 50, RGB565_BLACK);
 
+    const MidiBridge::Counters& midiStats = midiBridge.counters();
     char value[48] = {0};
+    
     if (bridgeUi.shouldDrawFullMetrics()) {
         snprintf(value, sizeof(value), "Notes %lu  Held %u", noteEventsSeen, bridgeUi.heldNoteCount());
         printDisplayLine(22, statusY + 52, 1, noteEventsSeen > 0 ? RGB565_LIME : RGB565_LIGHTGRAY, value);
@@ -414,7 +473,7 @@ static void updateDisplayDashboard(bool force)
             printDisplayLine(22, statusY + 64, 1, networkServices.hasRtpSession() ? RGB565_LIME : RGB565_GOLD, rtpLine);
 #endif
         } else {
-            printDisplayLine(22, statusY + 64, 1, lastMidiMs > 0 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
+            printDisplayLine(22, statusY + 64, 1, nowMs - lastMidiMs < 2000 ? RGB565_WHITE : RGB565_DARKGRAY, lastMidiText);
         }
 #endif
     }
@@ -490,6 +549,10 @@ void setup()
     Serial.begin(SERIAL_BAUD);
     delay(1000);
 
+    // Set log level for the application tag and diagnostics
+    esp_log_level_set("*", ESP_LOG_INFO);
+    esp_log_level_set("DIAG", ESP_LOG_INFO);
+
     bridgeSettings.begin(kDefaultBleName);
     bridgeUi.applySavedDisplayMode(bridgeSettings.displayModeIndex());
 
@@ -507,6 +570,14 @@ void setup()
     bleMidi.begin(bridgeSettings.bleDeviceName());
     bridgeUi.setBle(&bleMidi);
     midiBridge.begin(&bleMidi, &bridgeSettings, &bridgeUi);
+
+    // Start diagnostics task on Core 0 (low priority)
+    xTaskCreatePinnedToCore(monitorSystemResources, "diag", 3072, nullptr, 1, &diagTaskHandle, 0);
+
+    // Start high-priority MIDI processing task on Core 1
+    // Higher priority than the main Arduino loop (which is priority 1)
+    xTaskCreatePinnedToCore(midiProcessingTask, "midi_bridge", 4096, nullptr, 10, &midiTaskHandle, 1);
+
 #if ENABLE_RTP_MIDI
     networkServices.begin(RTP_MIDI_SESSION_NAME, bridgeSettings.bleDeviceName());
     midiBridge.setNetwork(&networkServices);
@@ -519,14 +590,14 @@ void setup()
 
 void loop()
 {
-    usbMidi.task();
-    bleMidi.task();
-#if ENABLE_RTP_MIDI
-    networkServices.task();
-#endif
+    // MIDI, BLE, and Network tasks are now handled in midi_bridge task.
+    // The main loop focuses on UI and animations.
+    
     const uint32_t nowMs = millis();
     bridgeUi.tick(nowMs);
     tickBongoCat(nowMs);
     printStatusIfChanged();
-    delayMicroseconds(50);
+    
+    // Yield to let other tasks run on Core 1 if needed
+    vTaskDelay(pdMS_TO_TICKS(1));
 }

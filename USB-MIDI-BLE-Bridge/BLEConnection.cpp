@@ -97,11 +97,22 @@ void BLEConnection::begin(const std::string& deviceName) {
     BLEDevice::init(String(deviceName.c_str()));
     pServer = BLEDevice::createServer();
     class ServerCallbacks : public BLEServerCallbacks {
+    public:
+        BLEConnection* bleCon;
+        ServerCallbacks(BLEConnection* con) : bleCon(con) {}
+
+        void onConnect(BLEServer* pServer) override {
+            // Request low latency connection parameters (7.5ms - 15ms)
+            // This is critical for BLE MIDI latency.
+            BLEDevice::setPower(ESP_PWR_LVL_P9); // Max power
+            pServer->updateConnParams(pServer->getConnId(), 6, 12, 0, 400);
+        }
+
         void onDisconnect(BLEServer* pServer) override {
             BLEDevice::startAdvertising();
         }
     };
-    pServer->setCallbacks(new ServerCallbacks());
+    pServer->setCallbacks(new ServerCallbacks(this));
 
     BLEService* pService = pServer->createService(BLE_MIDI_SERVICE_UUID);
     pCharacteristic = pService->createCharacteristic(

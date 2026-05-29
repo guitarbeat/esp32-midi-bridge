@@ -114,7 +114,8 @@ bool USBConnection::begin() {
 
     // Creates dedicated task on core 0 for continuous USB polling.
     // Ensures MIDI events are never lost due to delays in the main loop.
-    xTaskCreatePinnedToCore(_usbTask, "usb_midi", 4096, this, 5, &usbTaskHandle, 0);
+    // Priority 11 is higher than the MIDI bridge task (10).
+    xTaskCreatePinnedToCore(_usbTask, "usb_midi", 4096, this, 11, &usbTaskHandle, 0);
 
     lastError = "";
     return true;
@@ -229,7 +230,8 @@ const RawUsbMessage& USBConnection::getQueueMessage(int index) const {
 void USBConnection::_usbTask(void* arg) {
     USBConnection* usbCon = static_cast<USBConnection*>(arg);
     for (;;) {
-        usb_host_lib_handle_events(1, &usbCon->eventFlags);
+        // Handle library events with a short timeout to maintain responsiveness
+        usb_host_lib_handle_events(pdMS_TO_TICKS(1), &usbCon->eventFlags);
         
         // When all devices are gone, free them so new connections can be accepted
         if (usbCon->eventFlags & USB_HOST_LIB_EVENT_FLAGS_ALL_FREE) {
@@ -239,9 +241,11 @@ void USBConnection::_usbTask(void* arg) {
             usb_host_device_free_all();
         }
 
-        usb_host_client_handle_events(usbCon->clientHandle, 1);
+        // Handle client events
+        usb_host_client_handle_events(usbCon->clientHandle, pdMS_TO_TICKS(1));
 
-        vTaskDelay(1);
+        // We rely on the handle_events timeouts for yielding.
+        // If CPU usage is too high, a minimal vTaskDelay(1) can be re-added.
     }
 }
 
@@ -253,9 +257,11 @@ void USBConnection::_clientEventCallback(const usb_host_client_event_msg_t *even
     esp_err_t err;
     switch (eventMsg->event) {
         case USB_HOST_CLIENT_EVENT_NEW_DEV:
+            Serial.printf("[USB] New device detected at address %d\n", eventMsg->new_dev.address);
             err = usb_host_device_open(usbCon->clientHandle, eventMsg->new_dev.address, &usbCon->deviceHandle);
             if (err != ESP_OK) {
                 usbCon->lastError = "Device open failed (err=" + String(err) + ")";
+                Serial.println("[USB] " + usbCon->lastError);
                 return;
             }
             usbCon->loadDeviceName();
@@ -264,18 +270,25 @@ void USBConnection::_clientEventCallback(const usb_host_client_event_msg_t *even
                 err = usb_host_get_active_config_descriptor(usbCon->deviceHandle, &config_desc);
                 if (err != ESP_OK) {
                     usbCon->lastError = "Config descriptor failed (err=" + String(err) + ")";
+                    Serial.println("[USB] " + usbCon->lastError);
                     return;
                 }
+                Serial.printf("[USB] Active config length: %d\n", config_desc->wTotalLength);
                 usbCon->_processConfig(config_desc);
             }
             if (usbCon->isReady) {
                 usbCon->lastError = "";
+                Serial.printf("[USB] MIDI device '%s' ready.\n", usbCon->deviceName.c_str());
                 usbCon->onDeviceConnected();
             } else if (usbCon->lastError.length() == 0) {
-                usbCon->lastError = "No USB MIDIStreaming bulk IN endpoint found";
+                usbCon->lastError = "No MIDI interface found";
+                Serial.println("[USB] Error: No MIDI interface found. Check if the device is in 'Generic' USB mode.");
+            } else {
+                Serial.println("[USB] Error: " + usbCon->lastError);
             }
             break;
         case USB_HOST_CLIENT_EVENT_DEV_GONE:
+            Serial.println("[USB] Device removed.");
             usbCon->handleDeviceRemoved();
             break;
     }
@@ -366,6 +379,8 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
     uint16_t index = 0;
     bool claimedOk = false;
 
+    Serial.printf("[USB] Scanning %d bytes of descriptors...\n", totalLength);
+
     while (index < totalLength) {
         if (index + 1 >= totalLength) break;
         uint8_t len = p[index];
@@ -382,7 +397,16 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
             uint8_t bNumEndpoints      = p[index + 4];
             uint8_t bInterfaceClass    = p[index + 5];
             uint8_t bInterfaceSubClass = p[index + 6];
-            if (bInterfaceClass == 0x01 && bInterfaceSubClass == 0x03) {
+            
+            Serial.printf("[USB] Found Interface %d: Class 0x%02X, SubClass 0x%02X, Endpoints %d\n", 
+                          bInterfaceNumber, bInterfaceClass, bInterfaceSubClass, bNumEndpoints);
+
+            // MIDI Class is 0x01 (Audio), SubClass 0x03 (MIDI Streaming)
+            // Some devices might report Class 0xFF (Vendor Specific) but still work as MIDI
+            if ((bInterfaceClass == 0x01 && bInterfaceSubClass == 0x03) || 
+                (bInterfaceClass == 0xFF && bNumEndpoints >= 1)) {
+                
+                Serial.printf("[USB] Attempting to claim interface %d...\n", bInterfaceNumber);
                 esp_err_t err = usb_host_interface_claim(clientHandle, deviceHandle, bInterfaceNumber, bAlternateSetting);
                 if (err == ESP_OK) {
                     midiInterfaceNumber = static_cast<int8_t>(bInterfaceNumber);
@@ -394,14 +418,21 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
                         if (len2 < 2 || (idx2 + len2) > totalLength) break;
                         uint8_t type2 = p[idx2 + 1];
                         if (type2 == 0x04) break; // Next interface
-                        if (type2 == 0x05 && bNumEndpoints > 0) {
+                        
+                        if (type2 == 0x05) { // Endpoint Descriptor
                             if (len2 >= 7) {
                                 uint8_t bEndpointAddress = p[idx2 + 2];
                                 uint8_t bmAttributes = p[idx2 + 3];
                                 uint16_t wMaxPacketSize = (p[idx2 + 4] | (p[idx2 + 5] << 8));
                                 uint8_t bInterval = p[idx2 + 6];
+                                
+                                Serial.printf("[USB]   Endpoint 0x%02X: Attr 0x%02X, MaxPacket %d\n", 
+                                              bEndpointAddress, bmAttributes, wMaxPacketSize);
+
                                 if (wMaxPacketSize > 512) wMaxPacketSize = 512;
                                 if (wMaxPacketSize == 0) wMaxPacketSize = 64;
+                                
+                                // Bulk IN endpoint
                                 if ((bmAttributes & 0x03) == 0x02 && (bEndpointAddress & 0x80)) {
                                     uint32_t timeout = 3000;
                                     esp_err_t e2 = usb_host_transfer_alloc(wMaxPacketSize, timeout, &midiTransfer);
@@ -416,10 +447,13 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
                                         claimedOk = true;
                                         inReady = true;
                                         transferInFlight = true;
+                                        Serial.printf("[USB]   MIDI IN allocated on 0x%02X\n", bEndpointAddress);
                                     } else {
-                                        lastError = "MIDI IN transfer allocation failed (err=" + String(e2) + ")";
+                                        lastError = "MIDI IN alloc failed (err=" + String(e2) + ")";
                                     }
-                                } else if ((bmAttributes & 0x03) == 0x02 && !(bEndpointAddress & 0x80)) {
+                                } 
+                                // Bulk OUT endpoint
+                                else if ((bmAttributes & 0x03) == 0x02 && !(bEndpointAddress & 0x80)) {
                                     esp_err_t e2 = usb_host_transfer_alloc(wMaxPacketSize, 3000, &outTransfer);
                                     if (e2 == ESP_OK && outTransfer != nullptr) {
                                         outTransfer->device_handle = deviceHandle;
@@ -427,6 +461,7 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
                                         outTransfer->callback = _onSendComplete;
                                         outTransfer->context = this;
                                         outTransfer->num_bytes = wMaxPacketSize;
+                                        Serial.printf("[USB]   MIDI OUT allocated on 0x%02X\n", bEndpointAddress);
                                     }
                                 }
                             }
@@ -438,15 +473,18 @@ void USBConnection::_processConfig(const usb_config_desc_t *config_desc) {
                         usb_host_transfer_submit(midiTransfer);
                         return;
                     } else {
+                        Serial.println("[USB] Claimed interface but found no valid MIDI endpoints.");
                         usb_host_interface_release(clientHandle, deviceHandle, bInterfaceNumber);
                         midiInterfaceNumber = -1;
                     }
+                } else {
+                    Serial.printf("[USB] Failed to claim interface %d (err=%d)\n", bInterfaceNumber, err);
                 }
             }
         }
         index += len;
     }
     if (!claimedOk && lastError.length() == 0) {
-        lastError = "No USB MIDIStreaming bulk IN endpoint found";
+        lastError = "No USB MIDI interface found";
     }
 }

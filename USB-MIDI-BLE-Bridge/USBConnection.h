@@ -40,6 +40,9 @@ public:
     // Returns the last error message (empty if none).
     const String& getLastError() const { return lastError; }
 
+    // Returns the FreeRTOS task handle for the USB event task.
+    TaskHandle_t getTaskHandle() const { return usbTaskHandle; }
+
     // USB product or manufacturer string from enumeration (empty if unavailable).
     const String& getDeviceName() const { return deviceName; }
 
