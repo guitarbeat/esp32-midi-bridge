@@ -38,6 +38,10 @@ static const uint32_t SERIAL_BAUD = 115200;
 #define USB_HOST_BOOST_EN_PIN 13
 #endif
 
+#ifndef USB_HOST_POWER_FROM_BATTERY
+#define USB_HOST_POWER_FROM_BATTERY 0
+#endif
+
 #ifndef LCD_ENABLE_PIN
 #define LCD_ENABLE_PIN 5
 #endif
@@ -289,12 +293,12 @@ static void initBoardUsbHostPower()
 {
 #if USB_HOST_BOOST_EN_PIN >= 0
     pinMode(USB_HOST_BOOST_EN_PIN, OUTPUT);
-    digitalWrite(USB_HOST_BOOST_EN_PIN, LOW);
+    digitalWrite(USB_HOST_BOOST_EN_PIN, USB_HOST_POWER_FROM_BATTERY ? HIGH : LOW);
 #endif
 
 #if USB_HOST_VBUS_EN_PIN >= 0
     pinMode(USB_HOST_VBUS_EN_PIN, OUTPUT);
-    digitalWrite(USB_HOST_VBUS_EN_PIN, HIGH);
+    digitalWrite(USB_HOST_VBUS_EN_PIN, USB_HOST_POWER_FROM_BATTERY ? LOW : HIGH);
 #endif
 
 #if USB_HOST_LIMIT_EN_PIN >= 0

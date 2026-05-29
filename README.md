@@ -123,7 +123,7 @@ the normal system Bluetooth settings.
   ESP32-S3-USB-OTG board, powering only the Micro-USB `USB-to-UART` port can
   boot the bridge and advertise Bluetooth while leaving the Type-A host port
   unpowered. Use the Type-A `USB HOST` port for the piano and provide 5 V power
-  on the `USB_DEV` port, or use battery power with the board's battery switch.
+  on the `USB_DEV` port.
 - Try another known data-capable USB cable.
 - For ESP32-S3-USB-OTG, use the Type-A host port for the piano and the Micro-USB
   USB-to-UART port for flashing/logs.

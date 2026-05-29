@@ -55,7 +55,7 @@ not power every external host-device setup.
 
 If Bluetooth connects but no MIDI arrives, check this first: the bridge firmware
 can run from Micro-USB debug power while the Type-A `USB HOST` port has no VBUS
-for the piano. Power the `USB_DEV` port or use battery power.
+for the piano. The default build expects 5 V on the `USB_DEV` port.
 
 ## Hardware Reality Check
 
