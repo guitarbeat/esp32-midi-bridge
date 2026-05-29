@@ -1,0 +1,38 @@
+name: Arduino build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  compile:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Arduino CLI
+        uses: arduino/setup-arduino-cli@v2
+
+      - name: Install ESP32 core
+        run: |
+          arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+
+      - name: Install libraries
+        run: |
+          arduino-cli lib install FastLED "USB Host Shield Library 2.0" "GFX Library for Arduino"
+
+      - name: Compile ESP32-S3 USB host bridge
+        run: |
+          arduino-cli compile \
+            --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+            ./USB-MIDI-BLE-Bridge
+
+      - name: Compile classic ESP32 MAX3421E fallback
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            ./Classic-ESP32-MAX3421E-MIDI-BLE

@@ -6,20 +6,87 @@
 #include <Arduino.h>
 
 #if !defined(CONFIG_IDF_TARGET_ESP32S3)
-#error "USB-MIDI-BLE-Bridge requires an ESP32-S3 board with native USB-OTG host support. Classic ESP32/CYD boards cannot host USB MIDI in firmware alone."
+#error "USB-MIDI-BLE-Bridge requires an ESP32-S3 board with native USB-OTG host support. Classic ESP32 boards cannot host USB MIDI in firmware alone."
 #endif
 
+#include <Arduino_GFX_Library.h>
 #include "USBConnection.h"
 #include "BLEConnection.h"
 
-static const char* BLE_DEVICE_NAME = "CYD MIDI Bridge";
+#ifndef BLE_DEVICE_NAME_TEXT
+#define BLE_DEVICE_NAME_TEXT "Piano BLE Bridge"
+#endif
+
+static const char* BLE_DEVICE_NAME = BLE_DEVICE_NAME_TEXT;
 static const uint32_t SERIAL_BAUD = 115200;
+
+// Official Espressif ESP32-S3-USB-OTG board controls. These are harmless on
+// generic S3 boards only if the pins are unconnected; override to -1 if needed.
+#ifndef USB_HOST_SEL_PIN
+#define USB_HOST_SEL_PIN 18
+#endif
+
+#ifndef USB_HOST_VBUS_EN_PIN
+#define USB_HOST_VBUS_EN_PIN 12
+#endif
+
+#ifndef USB_HOST_LIMIT_EN_PIN
+#define USB_HOST_LIMIT_EN_PIN 17
+#endif
+
+#ifndef USB_HOST_BOOST_EN_PIN
+#define USB_HOST_BOOST_EN_PIN 13
+#endif
+
+#ifndef LCD_ENABLE_PIN
+#define LCD_ENABLE_PIN 5
+#endif
+
+#ifndef LCD_RESET_PIN
+#define LCD_RESET_PIN 8
+#endif
+
+#ifndef LCD_DC_PIN
+#define LCD_DC_PIN 4
+#endif
+
+#ifndef LCD_SCLK_PIN
+#define LCD_SCLK_PIN 6
+#endif
+
+#ifndef LCD_MOSI_PIN
+#define LCD_MOSI_PIN 7
+#endif
+
+#ifndef LCD_BACKLIGHT_PIN
+#define LCD_BACKLIGHT_PIN 9
+#endif
+
+static Arduino_DataBus* displayBus = new Arduino_ESP32SPI(
+    LCD_DC_PIN,
+    GFX_NOT_DEFINED,
+    LCD_SCLK_PIN,
+    LCD_MOSI_PIN,
+    GFX_NOT_DEFINED);
+
+static Arduino_GFX* display = new Arduino_ST7789(
+    displayBus,
+    LCD_RESET_PIN,
+    0,
+    true,
+    240,
+    240,
+    0,
+    0,
+    0,
+    0);
 
 BLEConnection bleMidi;
 
 static uint32_t usbPacketsSeen = 0;
 static uint32_t blePacketsSent = 0;
 static uint32_t blePacketsSkipped = 0;
+static bool displayReady = false;
 
 static uint8_t midiLengthFromStatus(uint8_t status)
 {
@@ -173,6 +240,88 @@ static void printStartupBanner()
     Serial.println();
 }
 
+static void printDisplayLine(int16_t x, int16_t y, uint8_t size, uint16_t color, const char* text)
+{
+    if (!displayReady) {
+        return;
+    }
+
+    display->setTextSize(size);
+    display->setTextColor(color);
+    display->setCursor(x, y);
+    display->print(text);
+}
+
+static void initDisplay()
+{
+#if LCD_ENABLE_PIN >= 0
+    pinMode(LCD_ENABLE_PIN, OUTPUT);
+    digitalWrite(LCD_ENABLE_PIN, LOW);
+#endif
+
+#if LCD_BACKLIGHT_PIN >= 0
+    pinMode(LCD_BACKLIGHT_PIN, OUTPUT);
+    digitalWrite(LCD_BACKLIGHT_PIN, HIGH);
+#endif
+
+    displayReady = display->begin(40000000);
+    if (!displayReady) {
+        Serial.println("[LCD] Display init failed.");
+        return;
+    }
+
+    display->fillScreen(RGB565_BLACK);
+    display->fillRoundRect(8, 8, 224, 224, 12, RGB565_NAVY);
+    display->drawRoundRect(8, 8, 224, 224, 12, RGB565_CYAN);
+    display->fillRoundRect(18, 18, 204, 204, 8, RGB565_BLACK);
+
+    printDisplayLine(34, 30, 2, RGB565_CYAN, "USB MIDI");
+    printDisplayLine(28, 58, 3, RGB565_WHITE, "BRIDGE");
+    printDisplayLine(28, 100, 2, RGB565_GREENYELLOW, "READY TO JAM");
+    printDisplayLine(28, 138, 1, RGB565_LIGHTGRAY, "Bluetooth name:");
+    printDisplayLine(28, 154, 2, RGB565_GOLD, BLE_DEVICE_NAME);
+    printDisplayLine(28, 198, 1, RGB565_LIGHTGRAY, "USB: waiting");
+    printDisplayLine(28, 214, 1, RGB565_LIGHTGRAY, "BLE: advertising");
+}
+
+static void initBoardUsbHostPower()
+{
+#if USB_HOST_BOOST_EN_PIN >= 0
+    pinMode(USB_HOST_BOOST_EN_PIN, OUTPUT);
+    digitalWrite(USB_HOST_BOOST_EN_PIN, LOW);
+#endif
+
+#if USB_HOST_VBUS_EN_PIN >= 0
+    pinMode(USB_HOST_VBUS_EN_PIN, OUTPUT);
+    digitalWrite(USB_HOST_VBUS_EN_PIN, HIGH);
+#endif
+
+#if USB_HOST_LIMIT_EN_PIN >= 0
+    pinMode(USB_HOST_LIMIT_EN_PIN, OUTPUT);
+    digitalWrite(USB_HOST_LIMIT_EN_PIN, HIGH);
+#endif
+
+#if USB_HOST_SEL_PIN >= 0
+    pinMode(USB_HOST_SEL_PIN, OUTPUT);
+    digitalWrite(USB_HOST_SEL_PIN, HIGH);
+#endif
+
+    delay(100);
+}
+
+static void updateDisplayStatus(bool usbConnected, bool bleConnected)
+{
+    if (!displayReady) {
+        return;
+    }
+
+    display->fillRect(24, 194, 192, 34, RGB565_BLACK);
+    printDisplayLine(28, 198, 1, usbConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
+                     usbConnected ? "USB: MIDI connected" : "USB: waiting");
+    printDisplayLine(28, 214, 1, bleConnected ? RGB565_LIME : RGB565_LIGHTGRAY,
+                     bleConnected ? "BLE: connected" : "BLE: advertising");
+}
+
 static void printStatusIfChanged()
 {
     static bool lastUsbConnected = false;
@@ -188,6 +337,7 @@ static void printStatusIfChanged()
                       bleConnected ? "connected" : "advertising");
         lastUsbConnected = usbConnected;
         lastBleConnected = bleConnected;
+        updateDisplayStatus(usbConnected, bleConnected);
     }
 
     if (millis() - lastSummaryMs >= 10000) {
@@ -204,6 +354,8 @@ void setup()
     Serial.begin(SERIAL_BAUD);
     delay(1000);
     printStartupBanner();
+    initDisplay();
+    initBoardUsbHostPower();
 
     if (usbMidi.begin()) {
         Serial.println("[USB] Host initialized. Waiting for a class-compliant USB MIDI device...");

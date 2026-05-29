@@ -8,10 +8,11 @@
 - Arduino libraries:
   - `USB Host Shield Library 2.0` `1.7.0`
   - `FastLED` `3.10.3`
+  - `GFX Library for Arduino` `1.6.5`
 
 ## Verified Arduino CLI Builds
 
-Classic ESP32/CYD with external MAX3421E USB host module:
+Classic ESP32 with external MAX3421E USB host module:
 
 ```powershell
 arduino-cli compile --fqbn esp32:esp32:esp32 .\Classic-ESP32-MAX3421E-MIDI-BLE
@@ -24,6 +25,33 @@ arduino-cli compile --fqbn esp32:esp32:esp32s3 .\USB-MIDI-BLE-Bridge
 ```
 
 Both builds passed locally after installing the ESP32 Arduino core and dependencies.
+
+## ESP32-S3-USB-OTG Development Board
+
+For the official Espressif ESP32-S3-USB-OTG board, build the native USB host
+sketch with the detected 8 MB flash layout and USB CDC serial enabled:
+
+```bash
+arduino-cli compile --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' ./USB-MIDI-BLE-Bridge
+arduino-cli upload -p /dev/cu.usbmodem11101 --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' ./USB-MIDI-BLE-Bridge
+```
+
+If the board disappears from `/dev/cu.*` after running USB host firmware, put it
+back in download mode: hold `BOOT`, press and release `RESET`, then release
+`BOOT`. Use the board's Micro-USB `USB-to-UART` port for flashing and serial
+logs.
+
+The sketch enables the board's USB host mux/power pins before starting the USB
+host stack:
+
+- `GPIO18` high selects the Type-A USB host connector.
+- `GPIO12` high enables host VBUS from the USB device power path.
+- `GPIO17` high enables the current-limited host power switch.
+- `GPIO13` low leaves battery boost disabled.
+
+For a USB MIDI device on the Type-A host port, the board also needs a 5 V source
+on the USB device/power path or battery power; Micro-USB debug power alone does
+not power every external host-device setup.
 
 ## Hardware Reality Check
 

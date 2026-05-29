@@ -1,18 +1,19 @@
-# USB MIDI to BLE MIDI Bridge
+# ESP32-S3 USB MIDI to BLE MIDI Bridge
 
 This sketch turns an ESP32-S3 board with native USB-OTG into a one-way MIDI bridge:
 
 ```text
-USB MIDI keyboard -> ESP32-S3 -> BLE MIDI -> iPhone/iPad
+USB MIDI piano/controller -> ESP32-S3 -> BLE MIDI -> phone/tablet/computer
 ```
 
-It is intentionally guarded for ESP32-S3 only. A classic CYD such as an ESP32-2432S024/ESP32-2432S028 with an ESP32-WROOM-32 module cannot host a USB MIDI keyboard through firmware alone.
+It is intentionally guarded for ESP32-S3 only. Classic ESP32 boards with
+ESP32-WROOM-32 modules cannot host a USB MIDI keyboard through firmware alone.
 
 ## Board Check
 
-- `ESP32-WROOM-32`, `ESP32-2432S024`, or `ESP32-2432S028`: classic CYD. This sketch will not compile for it because the chip has no native USB host peripheral.
+- `ESP32-WROOM-32`, `ESP32-2432S024`, or `ESP32-2432S028`: classic ESP32. This sketch will not compile for it because the chip has no native USB host peripheral.
 - `ESP32-S3`, `ESP-WROOM-S3`, or `ESP32-S3-2432...`: likely usable if the board exposes the USB-OTG D+/D- lines and can power the keyboard.
-- Classic CYD fallback requires an external USB host controller, for example a MAX3421E module. That needs a separate driver path and is not this firmware.
+- Classic ESP32 fallback requires an external USB host controller, for example a MAX3421E module. That needs a separate driver path and is not this firmware.
 
 ## Hardware
 
@@ -20,6 +21,9 @@ It is intentionally guarded for ESP32-S3 only. A classic CYD such as an ESP32-24
 - USB OTG adapter/cable for the MIDI keyboard.
 - A class-compliant USB MIDI keyboard or controller.
 - Optional separate USB cable/port for flashing and serial logs, depending on the board.
+
+The official Espressif ESP32-S3-USB-OTG Development Board is supported. Its
+display shows the firmware status and the Bluetooth MIDI name at boot.
 
 ## Arduino IDE Settings
 
@@ -38,7 +42,7 @@ The sketch folder includes its own `USBConnection` and `BLEConnection` helper fi
 3. Connect the keyboard to the ESP32-S3 OTG port.
 4. Confirm `MIDI device connected`.
 5. Open GarageBand, AUM, or another iOS MIDI app.
-6. Use the app's Bluetooth MIDI device menu and connect to `CYD MIDI Bridge`.
+6. Use the app's Bluetooth MIDI device menu and connect to `Piano BLE Bridge`.
 7. Press keys and confirm the app receives notes.
 
 The serial log prints USB/BLE connection state and basic MIDI event details.

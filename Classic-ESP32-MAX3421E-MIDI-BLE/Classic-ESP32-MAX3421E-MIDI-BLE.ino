@@ -2,7 +2,7 @@
 // MAX3421E USB host module/shield.
 //
 // Direction: USB MIDI keyboard/controller -> MAX3421E -> ESP32 -> BLE MIDI.
-// This is the viable path for classic ESP32/CYD boards. The built-in USB
+// This is the viable path for classic ESP32 boards. The built-in USB
 // connector on these boards is only for serial flashing/logging, not USB host.
 
 #include <Arduino.h>
@@ -17,7 +17,11 @@
 
 #include "BLEConnection.h"
 
-static const char* BLE_DEVICE_NAME = "CYD MIDI Bridge";
+#ifndef BLE_DEVICE_NAME_TEXT
+#define BLE_DEVICE_NAME_TEXT "Piano BLE Bridge"
+#endif
+
+static const char* BLE_DEVICE_NAME = BLE_DEVICE_NAME_TEXT;
 static const uint32_t SERIAL_BAUD = 115200;
 
 USB Usb;

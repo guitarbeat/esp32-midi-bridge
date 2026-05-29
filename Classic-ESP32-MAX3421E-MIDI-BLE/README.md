@@ -1,4 +1,4 @@
-# Classic ESP32/CYD USB MIDI to BLE MIDI Fallback
+# Classic ESP32 USB MIDI to BLE MIDI Fallback
 
 Your webflasher log shows:
 
@@ -12,7 +12,7 @@ That confirms a classic ESP32, not ESP32-S3. The board can run BLE MIDI, but its
 This fallback sketch uses an external MAX3421E USB host module:
 
 ```text
-USB MIDI keyboard -> MAX3421E USB host -> classic ESP32/CYD -> BLE MIDI -> iPhone
+USB MIDI piano/controller -> MAX3421E USB host -> classic ESP32 -> BLE MIDI -> phone/tablet/computer
 ```
 
 ## Required Libraries
@@ -25,7 +25,7 @@ The sketch folder includes its own BLE helper files so it can be opened directly
 
 ## Wiring Notes
 
-The exact pins depend on your MAX3421E module and which CYD header pins are exposed. The USB Host Shield 2.0 library uses its ESP32 pin defaults unless you customize the library settings.
+The exact pins depend on your MAX3421E module and which ESP32 header pins are exposed. The USB Host Shield 2.0 library uses its ESP32 pin defaults unless you customize the library settings.
 
 Common ESP32 wiring for MAX3421E modules is:
 
@@ -40,17 +40,17 @@ MAX3421E VCC  -> module-appropriate 3.3V/5V input
 USB VBUS      -> powered 5V for the keyboard
 ```
 
-Many CYD boards do not expose every convenient SPI pin, so verify your header/pinout before soldering. If those pins are unavailable, the cleaner path is still an ESP32-S3 board with native USB-OTG.
+Many compact ESP32 boards do not expose every convenient SPI pin, so verify your header/pinout before soldering. If those pins are unavailable, the cleaner path is still an ESP32-S3 board with native USB-OTG.
 
 ## Arduino IDE Settings
 
-1. Select a classic ESP32 target, usually `ESP32 Dev Module` or the matching CYD board entry.
+1. Select a classic ESP32 target, usually `ESP32 Dev Module` or the matching board entry.
 2. Open `Classic-ESP32-MAX3421E-MIDI-BLE.ino`.
 3. Upload at `115200` or your normal ESP32 upload speed.
 4. Open Serial Monitor at `115200`.
 5. Confirm `MAX3421E initialized`.
 6. Connect the USB MIDI keyboard to the MAX3421E host port.
-7. Connect from iPhone in an app's Bluetooth MIDI device menu to `CYD MIDI Bridge`.
+7. Connect from iPhone in an app's Bluetooth MIDI device menu to `Piano BLE Bridge`.
 
 ## Important
 
