@@ -13,7 +13,7 @@
  */
 class UartConnection : public Transport {
 public:
-    UartConnection(HardwareSerial& serial, int rxPin = 15, int txPin = 16);
+    UartConnection(int rxPin = 44, int txPin = 43);
     
     bool begin(uint32_t baud = 31250);
     const char* name() const override { return "UART-MIDI"; }
@@ -24,7 +24,7 @@ public:
 private:
     static void onMidiReceived(uint8_t status, const uint8_t* data, size_t length, size_t sysexPos, void* arg);
 
-    HardwareSerial& serial_;
+    HardwareSerial* serial_;
     int rxPin_;
     int txPin_;
     MidiCodec::Parser parser_;

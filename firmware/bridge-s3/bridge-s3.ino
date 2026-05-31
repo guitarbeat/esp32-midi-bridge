@@ -21,7 +21,7 @@ static Arduino_Canvas* canvas = nullptr;
 
 static USBConnection usbMidi;
 static BLEConnection bleMidi;
-static UartConnection uartMidi;
+static UartConnection uartMidi(Serial2);
 static BongoCatDisplay bongoCat;
 
 void setup()

@@ -1,5 +1,6 @@
 import serial
 import time
+import sys
 
 port = '/dev/cu.usbmodem11101'
 baud = 115200
