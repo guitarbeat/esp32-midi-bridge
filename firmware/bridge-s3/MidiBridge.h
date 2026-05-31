@@ -4,11 +4,11 @@
 #include <Arduino.h>
 
 #include "RTPMidiConfig.h"
+#include "Transport.h"
+#include <vector>
 
-class BLEConnection;
 class BridgeSettings;
 class BridgeUi;
-class NetworkServices;
 
 class MidiBridge {
 public:
@@ -27,23 +27,26 @@ public:
         kForwarded,
     };
 
-    void begin(BLEConnection* ble, BridgeSettings* settings, BridgeUi* ui);
-#if ENABLE_RTP_MIDI
-    void setNetwork(NetworkServices* network);
-#endif
+    void begin(BridgeSettings* settings, BridgeUi* ui);
+    
+    /** @brief Adds a transport to the bridge. The bridge will route messages to/from it. */
+    void addTransport(Transport* transport);
 
+    /** @brief Routes a MIDI packet from a source transport to all other connected transports. */
+    Result route(Transport* source, const uint8_t* data, size_t length);
+
+    // Legacy method for backward compatibility
     Result forward(const uint8_t* data, size_t length, uint8_t outMidiPacket[4]);
 
     const Counters& counters() const { return counters_; }
 
 private:
-    BLEConnection* ble_ = nullptr;
     BridgeSettings* settings_ = nullptr;
     BridgeUi* ui_ = nullptr;
-#if ENABLE_RTP_MIDI
-    NetworkServices* network_ = nullptr;
-#endif
+    std::vector<Transport*> transports_;
     Counters counters_;
+
+    void onMidiReceived(Transport* source, const uint8_t* data, size_t length);
 };
 
 extern MidiBridge midiBridge;

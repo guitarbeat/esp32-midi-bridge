@@ -150,40 +150,6 @@ void BridgeSettings::cycleBacklightDim()
     }
 }
 
-uint8_t BridgeSettings::clampNote(int note)
-{
-    if (note < 0) {
-        return 0;
-    }
-    if (note > 127) {
-        return 127;
-    }
-    return static_cast<uint8_t>(note);
-}
-
-bool BridgeSettings::transformUsbMidiPacket(uint8_t* packet)
-{
-    const uint8_t status = packet[1];
-    if (status == 0x00) {
-        return false;
-    }
-
-    if (midiChannel_ > 0) {
-        const uint8_t packetChannel = (status & 0x0F) + 1;
-        if (packetChannel != midiChannel_) {
-            return false;
-        }
-    }
-
-    const uint8_t messageType = status & 0xF0;
-    if (messageType == 0x90 || messageType == 0x80) {
-        const int transposed = static_cast<int>(packet[2]) + transpose_;
-        packet[2] = clampNote(transposed);
-    }
-
-    return true;
-}
-
 void BridgeSettings::printSummary() const
 {
     Serial.println("[SETTINGS] ---");

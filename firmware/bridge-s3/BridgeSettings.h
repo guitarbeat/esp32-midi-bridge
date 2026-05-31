@@ -23,8 +23,6 @@ public:
     void cycleMidiChannelFilter();
     void cycleBacklightDim();
 
-    bool transformUsbMidiPacket(uint8_t* packet);
-
     void printSummary() const;
 
 private:
@@ -36,7 +34,6 @@ private:
 
     void load();
     void saveAll();
-    static uint8_t clampNote(int note);
 };
 
 extern BridgeSettings bridgeSettings;

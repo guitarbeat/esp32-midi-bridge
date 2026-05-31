@@ -10,6 +10,7 @@
 #include <freertos/portmacro.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include "Transport.h"
 
 // Structure to store a raw USB packet.
 // Although transfers can be up to 64 bytes, only the first 4 are relevant per USB-MIDI event.
@@ -18,18 +19,20 @@ struct RawUsbMessage {
     size_t length;
 };
 
-class USBConnection {
+class USBConnection : public Transport {
 public:
     USBConnection();
 
     // Initializes the USB Host, registers the client, and starts the USB task on core 0.
     bool begin();
 
-    // Drains the ring buffer and forwards MIDI data to onMidiDataReceived(). Call from loop().
-    void task();
+    // Drains the ring buffer and forwards MIDI data.
+    void task() override;
 
-    // Returns whether the USB connection is ready.
-    bool isConnected() const { return isReady; }
+    // Transport implementation
+    const char* name() const override { return "USB-HOST"; }
+    bool isConnected() const override { return isReady; }
+    bool sendMidi(const uint8_t* packet, size_t length) override { return sendMidiMessage(packet, length); }
 
     // Returns whether the USB MIDI interface exposes an OUT endpoint.
     bool canSend() const { return outTransfer != nullptr; }

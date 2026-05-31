@@ -210,7 +210,9 @@ bool USBConnection::dequeueMidiMessage(RawUsbMessage &msg) {
 void USBConnection::processQueue() {
     RawUsbMessage msg;
     while (dequeueMidiMessage(msg)) {
-        onMidiDataReceived(msg.data, msg.length);
+        if (receiveCallback_) {
+            receiveCallback_(msg.data, msg.length);
+        }
     }
 }
 

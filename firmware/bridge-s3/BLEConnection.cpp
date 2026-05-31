@@ -185,7 +185,7 @@ void BLEConnection::setMidiMessageCallback(MIDIMessageCallback cb) {
 }
 
 void BLEConnection::onMidiDataReceived(const uint8_t* data, size_t length) {
-    // Default implementation: no-op.
-    (void)data;
-    (void)length;
+    if (receiveCallback_) {
+        receiveCallback_(data, length);
+    }
 }

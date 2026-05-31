@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Architecture Review - Piano BLE Bridge</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        mermaid.initialize({ startOnLoad: true, theme: 'neutral' });
+    </script>
+    <style>
+        .card { @apply bg-white p-6 rounded-xl shadow-lg border border-slate-200 mb-8; }
+        .badge { @apply px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider; }
+        .strong { @apply bg-emerald-100 text-emerald-800; }
+        .worth { @apply bg-amber-100 text-amber-800; }
+        .speculative { @apply bg-slate-100 text-slate-800; }
+        h1, h2, h3 { @apply font-bold text-slate-900; }
+        p { @apply text-slate-600 mt-2; }
+        code { @apply bg-slate-100 px-1 rounded text-pink-600; }
+    </style>
+</head>
+<body class="bg-slate-50 text-slate-900 font-sans p-8">
+    <div class="max-w-5xl mx-auto">
+        <header class="mb-12 border-b border-slate-200 pb-8">
+            <h1 class="text-4xl mb-2">Architecture Review</h1>
+            <p class="text-xl">Piano BLE Bridge: Renaming was just the start. Let's deepen the modules.</p>
+        </header>
+
+        <!-- Candidate 1 -->
+        <div class="card">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-2xl">1. Deepen the UI Module</h2>
+                <span class="badge strong">Strong Recommendation</span>
+            </div>
+            <p><strong>Files:</strong> <code>bridge-s3.ino</code>, <code>BridgeUi.cpp</code>, <code>BridgeUi.h</code></p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                <div>
+                    <h3 class="text-lg font-semibold border-l-4 border-red-400 pl-3">The Problem (Shallow & Leaky)</h3>
+                    <p>UI rendering is "orphaned": the <code>.ino</code> file draws the main dashboard because <code>BridgeUi</code> is too shallow to handle it. <code>BridgeUi</code> leaks internal state (counters, logs) to the caller just so it can be drawn.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold border-l-4 border-emerald-400 pl-3">The Solution (Deepening)</h3>
+                    <p>Move <strong>all</strong> rendering logic into <code>BridgeUi</code>. Provide a deep interface: <code>refresh()</code> for the frame loop and <code>notify(Event)</code> for reactive updates. The <code>.ino</code> file becomes a pure controller.</p>
+                </div>
+            </div>
+            <div class="mt-8 bg-slate-100 p-4 rounded-lg">
+                <div class="mermaid">
+graph TD
+    subgraph Before: Shallow & Leaky
+        INO[bridge-s3.ino] -->|Read State| UI[BridgeUi]
+        INO -->|Draw Dashboard| GFX[Arduino_GFX]
+        UI -->|Draw Overlays| GFX
+    end
+    subgraph After: Deep UI
+        CONTROLLER[bridge-s3.ino] -->|Notify Event| DEEPUI[BridgeUi]
+        CONTROLLER -->|Refresh| DEEPUI
+        DEEPUI -->|Draw Everything| GFX
+    end
+                </div>
+            </div>
+            <div class="mt-4">
+                <p><strong>Benefits:</strong> Locality of UI logic. <code>bridge-s3.ino</code> is reduced to coordination. Testing UI transitions becomes possible by mocking the GFX interface.</p>
+            </div>
+        </div>
+
+        <!-- Candidate 2 -->
+        <div class="card">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-2xl">2. Unify Connectivity Manager</h2>
+                <span class="badge worth">Worth Exploring</span>
+            </div>
+            <p><strong>Files:</strong> <code>NetworkServices.cpp</code>, <code>RTPMidiConnection.cpp</code>, <code>WifiProvisioning.cpp</code></p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                <div>
+                    <h3 class="text-lg font-semibold border-l-4 border-red-400 pl-3">The Problem (Excessive Indirection)</h3>
+                    <p>Understanding "Is the network ready?" requires bouncing through three files. <code>NetworkServices</code> is a shallow facade that adds indirection without providing leverage.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold border-l-4 border-emerald-400 pl-3">The Solution (Locality)</h3>
+                    <p>Merge these into a <code>ConnectivityManager</code>. Hide the state machine of WiFi -> Provisioning -> RTP-MIDI. Callers only care about <code>isConnected()</code> and <code>send(MidiPacket)</code>.</p>
+                </div>
+            </div>
+            <div class="mt-8 bg-slate-100 p-4 rounded-lg">
+                <div class="mermaid">
+graph LR
+    subgraph Before: Layered Indirection
+        NS[NetworkServices] --> RTP[RTPMidiConnection]
+        RTP --> WP[WifiProvisioning]
+    end
+    subgraph After: Deep Connectivity
+        CM[ConnectivityManager]
+        subgraph Internal
+            WP2[WiFi/Portal]
+            RTP2[RTP Stack]
+        end
+        CM -.-> WP2
+        CM -.-> RTP2
+    end
+                </div>
+            </div>
+            <div class="mt-4">
+                <p><strong>Benefits:</strong> Simplifies the main setup loop. Locality for network state transitions. Easier to add new transports (e.g. Ethernet) without changing the coordinator.</p>
+            </div>
+        </div>
+
+        <!-- Candidate 3 -->
+        <div class="card">
+            <div class="flex justify-between items-start mb-4">
+                <h2 class="text-2xl">3. MIDI Message Abstraction</h2>
+                <span class="badge worth">Worth Exploring</span>
+            </div>
+            <p><strong>Files:</strong> <code>MidiCodec.h</code>, <code>BridgeSettings.cpp</code>, <code>USBConnection.cpp</code></p>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-6">
+                <div>
+                    <h3 class="text-lg font-semibold border-l-4 border-red-400 pl-3">The Problem (Scattered Logic)</h3>
+                    <p>MIDI transformation (transpose, filter) is coupled with <code>BridgeSettings</code> (persistence). Parsing logic is repeated or scattered. No single "Seam" exists for MIDI processing.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold border-l-4 border-emerald-400 pl-3">The Solution (Deepening)</h3>
+                    <p>Create a <code>MidiMessage</code> module. It handles its own serialization/deserialization. Pair it with a <code>MidiProcessor</code> that handles transformations independently of settings.</p>
+                </div>
+            </div>
+            <div class="mt-4">
+                <p><strong>Benefits:</strong> Transformation logic becomes unit-testable in isolation. <code>BridgeSettings</code> returns to being a pure data layer. Transports only deal with <code>MidiMessage</code> objects.</p>
+            </div>
+        </div>
+
+        <section class="mt-12 p-8 bg-emerald-900 text-white rounded-2xl shadow-2xl">
+            <h2 class="text-3xl text-white mb-4">Top Recommendation: Deepen the UI</h2>
+            <p class="text-emerald-100 text-lg">The UI fragmentation is the largest source of friction. Moving all rendering into <code>BridgeUi</code> will immediately clarify the role of the <code>.ino</code> file and allow <code>BridgeUi</code> to earn its keep as a deep module. It also enables the introduction of a more robust state machine for UI modes.</p>
+        </section>
+
+        <footer class="mt-12 text-slate-400 text-sm text-center">
+            Generated by Gemini CLI Architecture Review Tool
+        </footer>
+    </div>
+</body>
+</html>

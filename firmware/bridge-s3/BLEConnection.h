@@ -4,6 +4,7 @@
 #include <Arduino.h>
 #include <BLEDevice.h>
 #include <BLEServer.h>
+#include "Transport.h"
 
 // Standard BLE MIDI Service UUIDs (Apple/MIDI Association specification)
 #define BLE_MIDI_SERVICE_UUID        "03B80E5A-EDE8-4B33-A751-6CE34EC4C700"
@@ -15,7 +16,7 @@ struct RawBleMessage {
     size_t length;     // Actual number of bytes received
 };
 
-class BLEConnection {
+class BLEConnection : public Transport {
 public:
     // Callback type for incoming MIDI messages
     typedef void (*MIDIMessageCallback)(const uint8_t* data, size_t length);
@@ -28,16 +29,15 @@ public:
     void begin(const std::string& deviceName = "ESP32 MIDI BLE");
 
     // Processes BLE events (generally not needed periodically).
-    void task();
+    void task() override;
 
-    // Returns whether a BLE device is currently connected.
-    bool isConnected() const;
+    // Transport implementation
+    const char* name() const override { return "BLE-MIDI"; }
+    bool isConnected() const override;
+    bool sendMidi(const uint8_t* data, size_t length) override;
 
     uint16_t getAverageLatencyMs() const { return avgLatencyMs_; }
     void recordForwardLatency(uint32_t latencyMs);
-
-    // Sends a MIDI message out over BLE notify
-    bool sendMidi(const uint8_t* data, size_t length);
 
     // Registers a callback to handle incoming BLE MIDI messages.
     void setMidiMessageCallback(MIDIMessageCallback cb);
