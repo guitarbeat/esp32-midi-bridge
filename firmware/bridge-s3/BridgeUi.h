@@ -81,6 +81,9 @@ private:
     void setBacklight(uint8_t level);
     bool isButtonPressed(int pin);
     void sendAllNotesOff();
+    void drawMiniKeyboard();
+    void drawVelocityBar();
+    void drawStatusChips(uint32_t nowMs);
 
     Arduino_GFX* gfx = nullptr;
     BLEConnection* ble = nullptr;

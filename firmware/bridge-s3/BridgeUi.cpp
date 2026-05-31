@@ -190,6 +190,7 @@ void BridgeUi::refresh(uint32_t nowMs, bool force)
         bongoCat_->draw(gfx, 95); 
     }
 
+    drawOverlays(nowMs);
     drawToast(nowMs);
 }
 
@@ -260,4 +261,124 @@ const char* BridgeUi::displayModeName() const
         case DisplayMode::kStage: return "STAGE";
         default: return "UNKNOWN";
     }
+}
+
+void BridgeUi::drawOverlays(uint32_t nowMs)
+{
+    if (shouldDrawStatusPanel()) {
+        drawVelocityBar();
+        drawMiniKeyboard();
+        drawStatusChips(nowMs);
+    }
+}
+
+void BridgeUi::drawMiniKeyboard()
+{
+    if (gfx == nullptr || engine_ == nullptr) return;
+    const auto& me = engine_->state();
+
+    auto isPitchActive = [&](uint8_t pc) -> bool {
+        for (int note = pc; note < 128; note += 12) {
+            if (me.heldNotes[note]) {
+                return true;
+            }
+        }
+        return false;
+    };
+
+    constexpr int16_t kKeyboardX = 72;
+    constexpr int16_t kKeyboardY = 168;
+
+    // 1. Draw 15 White Keys (C4 to C6)
+    // Pitch class pattern for 15 white keys starting at C:
+    // C, D, E, F, G, A, B, C, D, E, F, G, A, B, C
+    const uint8_t whitePC[15] = {0, 2, 4, 5, 7, 9, 11, 0, 2, 4, 5, 7, 9, 11, 0};
+
+    for (int i = 0; i < 15; i++) {
+        int16_t x = kKeyboardX + i * 10;
+        bool active = isPitchActive(whitePC[i]);
+        uint16_t color = active ? RGB565(0, 180, 216) : RGB565(240, 240, 245);
+        gfx->fillRect(x, kKeyboardY, 9, 34, color);
+    }
+
+    // 2. Draw 10 Black Keys centered on borders
+    // Black keys exist to the right of white keys at index:
+    // Octave 1: 0 (C), 1 (D), 3 (F), 4 (G), 5 (A)
+    // Octave 2: 7 (C), 8 (D), 10 (F), 11 (G), 12 (A)
+    const uint8_t blackPC[10] = {1, 3, 6, 8, 10, 1, 3, 6, 8, 10};
+    const uint8_t leftWhiteIdx[10] = {0, 1, 3, 4, 5, 7, 8, 10, 11, 12};
+
+    for (int i = 0; i < 10; i++) {
+        uint8_t wIdx = leftWhiteIdx[i];
+        int16_t bx = kKeyboardX + (wIdx + 1) * 10 - 3;
+        bool active = isPitchActive(blackPC[i]);
+        uint16_t color = active ? RGB565_GOLD : RGB565(30, 30, 35);
+        gfx->fillRect(bx, kKeyboardY, 6, 20, color);
+    }
+}
+
+void BridgeUi::drawVelocityBar()
+{
+    if (gfx == nullptr || engine_ == nullptr) return;
+    const auto& me = engine_->state();
+
+    constexpr int16_t kKeyboardX = 72;
+    constexpr int16_t kVelocityY = 208;
+
+    int numActive = 0;
+    if (me.heldCount > 0 && me.lastVelocity > 0) {
+        numActive = (me.lastVelocity * 15) / 127;
+        if (numActive == 0) numActive = 1;
+    }
+
+    for (int i = 0; i < 15; i++) {
+        int16_t x = kKeyboardX + i * 10;
+        bool active = (i < numActive);
+
+        uint16_t color;
+        if (active) {
+            if (i < 9) {
+                color = RGB565(30, 200, 120);
+            } else if (i < 13) {
+                color = RGB565(250, 160, 20);
+            } else {
+                color = RGB565(255, 80, 80);
+            }
+        } else {
+            color = RGB565(40, 40, 45);
+        }
+
+        gfx->fillRect(x, kVelocityY, 9, 4, color);
+    }
+}
+
+void BridgeUi::drawStatusChips(uint32_t nowMs)
+{
+    if (gfx == nullptr || engine_ == nullptr) return;
+    const auto& me = engine_->state();
+
+    const bool usbOk = usb_ && usb_->isConnected();
+    const bool bleOk = ble && ble->isConnected();
+
+    constexpr int16_t kStartX = 147 - 57;
+    constexpr int16_t kChipY = 220;
+    constexpr int16_t kChipW = 34;
+    constexpr int16_t kChipH = 12;
+
+    auto drawBadge = [&](int16_t x, const char* label, bool active, uint16_t activeBgColor, uint16_t inactiveColor) {
+        if (active) {
+            gfx->fillRoundRect(x, kChipY, kChipW, kChipH, 2, activeBgColor);
+            gfx->setTextColor(RGB565_WHITE);
+        } else {
+            gfx->drawRoundRect(x, kChipY, kChipW, kChipH, 2, inactiveColor);
+            gfx->setTextColor(inactiveColor);
+        }
+        gfx->setTextSize(1);
+        gfx->setCursor(x + 8, kChipY + 2);
+        gfx->print(label);
+    };
+
+    drawBadge(kStartX, "USB", usbOk, RGB565(40, 180, 80), RGB565(60, 60, 70));
+    drawBadge(kStartX + 40, "BLE", bleOk, RGB565(0, 120, 240), RGB565(60, 60, 70));
+    drawBadge(kStartX + 80, "SUS", me.sustainDown, RGB565(240, 140, 0), RGB565(35, 35, 40));
 }
