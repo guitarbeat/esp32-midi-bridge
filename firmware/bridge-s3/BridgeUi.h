@@ -21,7 +21,7 @@ public:
         kModeCount
     };
 
-    void begin(Arduino_GFX* gfx, int16_t backlightPin);
+    void begin(Arduino_GFX* gfx);
     void applySavedDisplayMode(uint8_t modeIndex);
     void setBle(BLEConnection* ble);
     void setUsbMidi(USBConnection* usb);
@@ -59,31 +59,22 @@ public:
     const MidiLogEntry* logEntries() const { return logEntries_; }
     uint8_t logCount() const { return logCount_; }
 
+    // Logical UI Actions (called by InputManager)
+    void onOkTap();
+    void onOkHold();
+    void onUpTap();
+    void onDownTap();
+    void onMenuTap();
+    void onMenuHold();
+
 private:
-    struct Button {
-        int pin = -1;
-        bool down = false;
-        uint32_t downMs = 0;
-        bool actionFired = false;
-    };
-
-    static constexpr uint32_t kShortPressMaxMs = 400;
-    static constexpr uint32_t kOkPanicHoldMs = 1000;
-    static constexpr uint32_t kOkPauseHoldMs = 2500;
-    static constexpr uint32_t kMenuLongHoldMs = 1000;
-    static constexpr uint32_t kMenuWifiSetupHoldMs = 4000;
-
-    void handleBoardButtons(uint32_t nowMs);
     void cycleDisplayMode();
     void toggleBridgePaused();
     void showToast(const char* text, uint32_t nowMs);
     void drawToast(uint32_t nowMs);
+    void drawKeyboardBar();
     void setBacklight(uint8_t level);
-    bool isButtonPressed(int pin);
     void sendAllNotesOff();
-    void drawMiniKeyboard();
-    void drawVelocityBar();
-    void drawStatusChips(uint32_t nowMs);
 
     Arduino_GFX* gfx = nullptr;
     BLEConnection* ble = nullptr;
@@ -112,16 +103,10 @@ private:
     uint32_t lastActivityMs_ = 0;
     uint32_t lastRefreshMs_ = 0;
 
-    bool pauseToggleFired_ = false;
-    bool menuWifiSetupFired_ = false;
-
     char toastText_[40] = {0};
     uint32_t toastUntilMs_ = 0;
 
-    Button okButton_;
-    Button upButton_;
-    Button downButton_;
-    Button menuButton_;
+    static constexpr int16_t kSidebarW = 54;
 };
 
 extern BridgeUi bridgeUi;
