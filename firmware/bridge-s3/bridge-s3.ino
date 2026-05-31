@@ -21,7 +21,7 @@ static Arduino_Canvas* canvas = nullptr;
 
 static USBConnection usbMidi;
 static BLEConnection bleMidi;
-static UartConnection uartMidi(Serial2);
+static UartConnection uartMidi(Serial2, 48 /* RX */, 47 /* TX */);
 static BongoCatDisplay bongoCat;
 
 void setup()
@@ -47,14 +47,17 @@ void setup()
     // 3. UI and Graphics
     Serial.println("[SYSTEM] Initializing display...");
     canvas = new Arduino_Canvas(240, 240, board->getDisplay());
-    if (canvas->begin()) {
+    if (canvas != nullptr && canvas->begin()) {
         bridgeUi.begin(canvas);
         bridgeUi.setBoard(board);
         bridgeUi.setBongoCat(&bongoCat);
         board->setBacklight(255);
+        bridgeUi.refresh(millis(), true);
         Serial.println("[SYSTEM] Display canvas initialized.");
     } else {
         Serial.println("[SYSTEM] ERROR: Display canvas allocation failed! (Check PSRAM settings)");
+        delete canvas;
+        canvas = nullptr;
     }
     
     // 4. Input Mapping
@@ -76,7 +79,7 @@ void setup()
         else if (e == InputManager::Event::kLongHold) connectivityManager.startProvisioning();
     });
     inputManager.onEvent("MENU", [](InputManager::Event e){
-        // Disabled due to GPIO conflict
+        if (e == InputManager::Event::kTap) bridgeSystem.cycleBacklightDim();
     });
 
     // 5. MIDI Hub Coordination
@@ -116,8 +119,10 @@ void loop()
     connectivityManager.task();
     
     // UI Refresh
-    bridgeUi.refresh(now);
-    canvas->flush();
+    if (canvas != nullptr) {
+        bridgeUi.refresh(now);
+        canvas->flush();
+    }
     
     vTaskDelay(pdMS_TO_TICKS(1));
 }

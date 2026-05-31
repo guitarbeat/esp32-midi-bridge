@@ -2,11 +2,11 @@
 
 /**
  * @brief Implementation for the ESP32-S3-USB-OTG board.
- * Enhanced Power Logic: Handles potential pin variations for SUB-V1/V2.
+ * Display wiring matches Espressif's esp32s3usbotg variant (ST7789 on SPI, BL=GPIO9, CS/EN=GPIO5).
  */
 class S3UsbOtgBoard : public Board {
 public:
-    S3UsbOtgBoard() : 
+    S3UsbOtgBoard() :
         bus(new Arduino_ESP32SPI(
             4 /* DC */,
             5 /* CS */,
@@ -20,7 +20,7 @@ public:
             true /* IPS */,
             240 /* width */,
             240 /* height */,
-            0, 0, 0, 0)) // Standard zero offset
+            0, 0, 0, 0))
     {}
 
     bool begin() override {
@@ -30,25 +30,30 @@ public:
         pinMode(17 /* LIMIT */, OUTPUT); digitalWrite(17, HIGH);
         pinMode(13 /* BOOST */, OUTPUT); digitalWrite(13, LOW);
 
-        // 2. Triple-Pin Display Power Enable
-        // Different revisions use different pins for enable/backlight.
-        // We trigger all of them to be safe.
-        pinMode(5, OUTPUT);  digitalWrite(5, LOW);  // Display Enable (Active Low)
-        pinMode(14, OUTPUT); digitalWrite(14, HIGH); // Power Gate / Backlight (Active High)
-        pinMode(9, OUTPUT);  digitalWrite(9, HIGH);  // Backlight PWM (Active High)
-        delay(100);
+        // 2. LCD power / reset (official board: GPIO5 active-low enable, GPIO9 backlight, GPIO8 reset)
+        pinMode(5, OUTPUT);
+        digitalWrite(5, LOW);  // display enable (active low, shared with SPI CS)
+        pinMode(9, OUTPUT);
+        digitalWrite(9, LOW);  // keep backlight off until init completes
 
-        // 3. LCD Initialization
-        if (!display->begin(40000000)) { 
+        pinMode(8, OUTPUT);
+        digitalWrite(8, LOW);
+        delay(20);
+        digitalWrite(8, HIGH);
+        delay(120);
+
+        // 3. LCD Initialization — 80 MHz verified on ESP32-S3-USB-OTG ST7789
+        if (!display->begin(80000000)) {
             return false;
         }
 
-        // 4. Buttons (Pull-ups)
+        // 4. Buttons (GPIO14 is MENU on this board — do not repurpose as display power)
         pinMode(0 /* OK/Boot */, INPUT_PULLUP);
         pinMode(10 /* UP */, INPUT_PULLUP);
         pinMode(11 /* DOWN */, INPUT_PULLUP);
+        pinMode(14 /* MENU */, INPUT_PULLUP);
 
-        // 5. Battery Sensing
+        // 5. Battery Sensing (BAT_VOLTS = ADC1 ch1 = GPIO2 on esp32s3usbotg)
         analogReadResolution(12);
 
         return true;
@@ -59,15 +64,15 @@ public:
     }
 
     void setBacklight(uint8_t level) override {
-        // Drive both potential backlight pins
-        pinMode(14, OUTPUT);
-        digitalWrite(14, level > 0 ? HIGH : LOW);
-        pinMode(9, OUTPUT);
-        digitalWrite(9, level > 0 ? HIGH : LOW);
+        if (!backlightPwmAttached_) {
+            ledcAttach(9, 5000, 8);
+            backlightPwmAttached_ = true;
+        }
+        ledcWrite(9, level);
     }
 
     float getBatteryVoltage() override {
-        const int raw = analogRead(1 /* BATT_SENSE */);
+        const int raw = analogRead(2 /* BAT_VOLTS */);
         return (raw / 4095.0f) * 3.3f * 2.0f;
     }
 
@@ -79,13 +84,14 @@ public:
         if (strcmp(name, "OK") == 0) return 0;
         if (strcmp(name, "UP") == 0) return 10;
         if (strcmp(name, "DOWN") == 0) return 11;
-        // MENU is disabled on this board as pin 14 is the display power gate
+        if (strcmp(name, "MENU") == 0) return 14;
         return -1;
     }
 
 private:
     Arduino_DataBus* bus;
     Arduino_GFX* display;
+    bool backlightPwmAttached_ = false;
 };
 
 Board* createBoard() {

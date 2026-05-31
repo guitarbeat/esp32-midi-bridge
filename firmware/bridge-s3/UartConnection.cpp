@@ -6,6 +6,14 @@ UartConnection::UartConnection(HardwareSerial& serial, int rxPin, int txPin)
 }
 
 bool UartConnection::begin(uint32_t baud) {
+#if CONFIG_IDF_TARGET_ESP32S3
+    // GPIO 43/44 are U0TXD/U0RXD for the USB Serial/JTAG controller. Reconfiguring
+    // them as UART breaks flashing and serial logging over the native USB port.
+    if (rxPin_ == 43 || rxPin_ == 44 || txPin_ == 43 || txPin_ == 44) {
+        Serial.println("[UART] ERROR: GPIO 43/44 are USB Serial/JTAG — pick other pins");
+        return false;
+    }
+#endif
     serial_->begin(baud, SERIAL_8N1, rxPin_, txPin_);
     serial_->setTimeout(0); // Non-blocking readBytes
     initialized_ = true;

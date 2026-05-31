@@ -25,6 +25,10 @@ arduino-cli upload \
 
 Replace the port with your board (`arduino-cli board list`).
 
+**Before uploading:** close Serial Monitor, `read_serial.py`, and any other app
+using the USB port. A background serial reader causes uploads to fail around
+80–280 KB with errors like “chip stopped responding” or “serial data stream stopped”.
+
 ### Prebuilt binary
 
 CI builds `./firmware/bridge-s3` and uploads `bridge-s3.ino.bin` as a
@@ -164,6 +168,16 @@ If the board disappears from `/dev/cu.*` after USB host firmware runs:
 2. Press and release **RESET**
 3. Release **BOOT**
 4. Flash again using the **USB-to-UART** Micro-USB port
+
+### Upload drops mid-flash (~80–280 KB)
+
+1. **Close other serial clients** — only one process may use `/dev/cu.usbmodem*`.
+   Check with `lsof /dev/cu.usbmodem11101` (adjust port name).
+2. **Do not use GPIO 43/44 for UART MIDI** — they are the USB Serial/JTAG pins.
+   This firmware uses GPIO 47 (TX) / 48 (RX) when UART MIDI is enabled.
+3. If uploads still fail, try a shorter data-capable USB cable or lower speed:
+   `--upload-property upload.speed=460800`
+4. Manual download mode: hold **BOOT**, tap **RESET**, release **BOOT**, then upload.
 
 ## USB host power pins (ESP32-S3-USB-OTG)
 

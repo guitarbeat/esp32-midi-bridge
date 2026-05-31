@@ -35,7 +35,7 @@ private:
     int8_t transpose_ = 0;
     uint8_t midiChannel_ = 0;
     uint8_t displayMode_ = 0;
-    bool uartEnabled_ = true;
+    bool uartEnabled_ = false;
     uint32_t uartBaudRate_ = 31250;
 
     void load();

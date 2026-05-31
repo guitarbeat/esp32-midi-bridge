@@ -35,6 +35,12 @@ public:
     
     /** @brief Optional periodic hardware maintenance (e.g. smoothing ADC reads). */
     virtual void task() {}
+
+    /** @brief DIN MIDI UART RX pin (must not be GPIO 43/44 on ESP32-S3). */
+    virtual int uartMidiRxPin() const { return 48; }
+
+    /** @brief DIN MIDI UART TX pin (must not be GPIO 43/44 on ESP32-S3). */
+    virtual int uartMidiTxPin() const { return 47; }
 };
 
 /** @brief Factory function to create the specific board instance. */
