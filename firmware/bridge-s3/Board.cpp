@@ -2,7 +2,7 @@
 
 /**
  * @brief Implementation for the ESP32-S3-USB-OTG board.
- * Display wiring matches Espressif's esp32s3usbotg variant (ST7789 on SPI, BL=GPIO9, CS/EN=GPIO5).
+ * Display init matches the verified monolithic sketch (commit 0dda545).
  */
 class S3UsbOtgBoard : public Board {
 public:
@@ -24,38 +24,36 @@ public:
     {}
 
     bool begin() override {
-        // 1. USB Host Power Pins
+        // 1. LCD enable + init before USB host rails
+        pinMode(5, OUTPUT);
+        digitalWrite(5, LOW);
+
+        Serial.println("[LCD] display->begin(80MHz)...");
+        Serial.flush();
+        if (!display->begin(80000000)) {
+            Serial.println("[LCD] display->begin FAILED");
+            Serial.flush();
+            return false;
+        }
+        Serial.println("[LCD] display->begin OK");
+        Serial.flush();
+
+        pinMode(9, OUTPUT);
+        digitalWrite(9, HIGH);
+
+        // 2. USB host power
         pinMode(18 /* SEL */, OUTPUT); digitalWrite(18, HIGH);
         pinMode(12 /* VBUS */, OUTPUT); digitalWrite(12, HIGH);
         pinMode(17 /* LIMIT */, OUTPUT); digitalWrite(17, HIGH);
         pinMode(13 /* BOOST */, OUTPUT); digitalWrite(13, LOW);
 
-        // 2. LCD power / reset (official board: GPIO5 active-low enable, GPIO9 backlight, GPIO8 reset)
-        pinMode(5, OUTPUT);
-        digitalWrite(5, LOW);  // display enable (active low, shared with SPI CS)
-        pinMode(9, OUTPUT);
-        digitalWrite(9, LOW);  // keep backlight off until init completes
-
-        pinMode(8, OUTPUT);
-        digitalWrite(8, LOW);
-        delay(20);
-        digitalWrite(8, HIGH);
-        delay(120);
-
-        // 3. LCD Initialization — 80 MHz verified on ESP32-S3-USB-OTG ST7789
-        if (!display->begin(80000000)) {
-            return false;
-        }
-
-        // 4. Buttons (GPIO14 is MENU on this board — do not repurpose as display power)
+        // 3. Buttons
         pinMode(0 /* OK/Boot */, INPUT_PULLUP);
         pinMode(10 /* UP */, INPUT_PULLUP);
         pinMode(11 /* DOWN */, INPUT_PULLUP);
         pinMode(14 /* MENU */, INPUT_PULLUP);
 
-        // 5. Battery Sensing (BAT_VOLTS = ADC1 ch1 = GPIO2 on esp32s3usbotg)
         analogReadResolution(12);
-
         return true;
     }
 
@@ -64,15 +62,12 @@ public:
     }
 
     void setBacklight(uint8_t level) override {
-        if (!backlightPwmAttached_) {
-            ledcAttach(9, 5000, 8);
-            backlightPwmAttached_ = true;
-        }
-        ledcWrite(9, level);
+        pinMode(9, OUTPUT);
+        digitalWrite(9, level > 0 ? HIGH : LOW);
     }
 
     float getBatteryVoltage() override {
-        const int raw = analogRead(2 /* BAT_VOLTS */);
+        const int raw = analogRead(2 /* BAT_VOLTS on esp32s3usbotg */);
         return (raw / 4095.0f) * 3.3f * 2.0f;
     }
 
@@ -91,7 +86,6 @@ public:
 private:
     Arduino_DataBus* bus;
     Arduino_GFX* display;
-    bool backlightPwmAttached_ = false;
 };
 
 Board* createBoard() {

@@ -15,9 +15,9 @@
 #include "BridgeUi.h"
 #include "animation/BongoCat.h"
 
-// System Components
+// System Components — canvas allocated at static init (115 KB) while heap is clean.
 static Board* board = createBoard();
-static Arduino_Canvas* canvas = nullptr;
+static Arduino_Canvas* canvas = new Arduino_Canvas(240, 240, board->getDisplay());
 
 static USBConnection usbMidi;
 static BLEConnection bleMidi;
@@ -37,27 +37,31 @@ void setup()
     
     // 1. Hardware Bootstrap
     if (!board->begin()) {
-        Serial.println("[SYSTEM] Hardware initialization failed.");
-        while(1) delay(100);
+        Serial.println("[SYSTEM] Hardware initialization failed (LCD SPI).");
+    } else {
+        Serial.println("[SYSTEM] LCD panel initialized.");
     }
     
     // 2. System Controller (Brain)
     bridgeSystem.begin();
     
-    // 3. UI and Graphics
-    Serial.println("[SYSTEM] Initializing display...");
-    canvas = new Arduino_Canvas(240, 240, board->getDisplay());
-    if (canvas != nullptr && canvas->begin()) {
+    // 3. UI and Graphics framebuffer (panel already initialized in board->begin)
+    Serial.println("[SYSTEM] Initializing display canvas...");
+    Serial.flush();
+    if (canvas != nullptr && canvas->begin(GFX_SKIP_OUTPUT_BEGIN)) {
+        Serial.printf("[SYSTEM] Canvas framebuffer OK (%u bytes free heap)\n", ESP.getFreeHeap());
+        Serial.flush();
         bridgeUi.begin(canvas);
         bridgeUi.setBoard(board);
         bridgeUi.setBongoCat(&bongoCat);
         board->setBacklight(255);
         bridgeUi.refresh(millis(), true);
+        canvas->flush();
         Serial.println("[SYSTEM] Display canvas initialized.");
+        Serial.flush();
     } else {
-        Serial.println("[SYSTEM] ERROR: Display canvas allocation failed! (Check PSRAM settings)");
-        delete canvas;
-        canvas = nullptr;
+        Serial.printf("[SYSTEM] ERROR: Canvas init failed (%u bytes free heap)\n", ESP.getFreeHeap());
+        Serial.flush();
     }
     
     // 4. Input Mapping

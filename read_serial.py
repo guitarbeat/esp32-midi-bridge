@@ -1,44 +1,59 @@
 #!/usr/bin/env python3
-"""Read ESP32-S3 USB Serial/JTAG logs. Close this before flashing — exclusive port access."""
+"""Read ESP32-S3 USB Serial/JTAG logs. Close this before flashing."""
 
-import fcntl
-import serial
+import glob
 import sys
 import time
 
-port = "/dev/cu.usbmodem11101"
-baud = 115200
+try:
+    import serial
+    from serial.serialutil import SerialException
+except ImportError:
+    print("Install pyserial: pip3 install pyserial")
+    sys.exit(1)
+
+BAUD = 115200
 
 
-def port_is_locked(path: str) -> bool:
-    try:
-        with open(path, "rb", buffering=0) as handle:
-            fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            fcntl.flock(handle, fcntl.LOCK_UN)
-        return False
-    except OSError:
-        return True
+def find_port() -> str:
+    for pattern in ("/dev/cu.usbmodem*", "/dev/tty.usbmodem*"):
+        matches = sorted(glob.glob(pattern))
+        if matches:
+            return matches[0]
+    return "/dev/cu.usbmodem11101"
 
 
-print(f"Listening on {port} ({baud} baud)")
-print("Close this script before arduino-cli upload or esptool flash.")
-print("Press Ctrl+C to exit.\n")
+def open_port(path: str) -> serial.Serial:
+    ser = serial.Serial()
+    ser.port = path
+    ser.baudrate = BAUD
+    ser.timeout = 0.5
+    ser.dtr = False
+    ser.rts = False
+    ser.open()
+    return ser
 
-while True:
-    if port_is_locked(port):
-        print(f"{port} is busy (upload or another monitor?). Waiting...")
-        time.sleep(1)
-        continue
 
-    try:
-        with serial.Serial(port, baud, timeout=1) as ser:
-            print("Connected.")
-            while True:
-                line = ser.readline()
-                if line:
-                    print(line.decode("utf-8", errors="replace").strip())
-    except serial.SerialException as exc:
-        print(f"Serial error: {exc}. Retrying...")
-        time.sleep(0.5)
-    except KeyboardInterrupt:
-        break
+def main() -> None:
+    port = find_port()
+    print(f"Listening on {port} ({BAUD} baud)")
+    print("Close this script before arduino-cli upload or esptool flash.")
+    print("Press Ctrl+C to exit.\n")
+
+    while True:
+        try:
+            with open_port(port) as ser:
+                print("Connected.")
+                while True:
+                    line = ser.readline()
+                    if line:
+                        print(line.decode("utf-8", errors="replace").strip())
+        except SerialException as exc:
+            print(f"Serial error: {exc}. Retrying in 1s...")
+            time.sleep(1)
+        except KeyboardInterrupt:
+            break
+
+
+if __name__ == "__main__":
+    main()

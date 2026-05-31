@@ -10,20 +10,33 @@
 
 ## Product Firmware (ESP32-S3)
 
-Official Espressif ESP32-S3-USB-OTG board — 8 MB flash, USB CDC on boot:
+Official Espressif **ESP32-S3-USB-OTG** board — 8 MB flash, no external PSRAM:
 
 ```bash
 arduino-cli compile \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 
 arduino-cli upload \
   -p /dev/cu.usbmodem11101 \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
 
+Do **not** use `PSRAM=enabled` on this board — boot logs show
+`quad_psram: PSRAM chip is not connected`.
+
 Replace the port with your board (`arduino-cli board list`).
+
+**After USB Serial/JTAG upload:** the default Arduino reset often leaves the chip in
+**download mode** (`waiting for download` in serial, blank display). Either:
+
+- Press **RESET** once (do **not** hold BOOT), or
+- Use the helper script (recommended):
+
+```bash
+./scripts/flash-bridge-s3.sh
+```
 
 **Before uploading:** close Serial Monitor, `read_serial.py`, and any other app
 using the USB port. A background serial reader causes uploads to fail around

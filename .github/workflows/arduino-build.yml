@@ -29,7 +29,7 @@ jobs:
         run: |
           arduino-cli compile \
             --output-dir dist/s3 \
-            --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+            --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
             ./firmware/bridge-s3
 
       - name: Upload S3 firmware artifact
