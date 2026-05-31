@@ -36,11 +36,16 @@ void setup()
     bridgeSystem.begin();
     
     // 3. UI and Graphics
+    Serial.println("[SYSTEM] Initializing display...");
     canvas = new Arduino_Canvas(240, 240, board->getDisplay());
     if (canvas->begin()) {
         bridgeUi.begin(canvas);
         bridgeUi.setBoard(board);
         bridgeUi.setBongoCat(&bongoCat);
+        board->setBacklight(255);
+        Serial.println("[SYSTEM] Display canvas initialized.");
+    } else {
+        Serial.println("[SYSTEM] ERROR: Display canvas allocation failed! (Check PSRAM settings)");
     }
     
     // 4. Input Mapping
@@ -53,11 +58,16 @@ void setup()
         if (e == InputManager::Event::kTap) bridgeUi.cycleDisplayMode();
         else if (e == InputManager::Event::kLongHold) bridgeSystem.sendPanic();
     });
-    inputManager.onEvent("UP", [](InputManager::Event e){ if (e == InputManager::Event::kTap) bridgeSystem.stepTranspose(1); });
-    inputManager.onEvent("DOWN", [](InputManager::Event e){ if (e == InputManager::Event::kTap) bridgeSystem.stepTranspose(-1); });
-    inputManager.onEvent("MENU", [](InputManager::Event e){
-        if (e == InputManager::Event::kTap) bridgeSystem.cycleMidiChannel();
+    inputManager.onEvent("UP", [](InputManager::Event e){ 
+        if (e == InputManager::Event::kTap) bridgeSystem.stepTranspose(1); 
+        else if (e == InputManager::Event::kLongHold) bridgeSystem.cycleMidiChannel();
+    });
+    inputManager.onEvent("DOWN", [](InputManager::Event e){ 
+        if (e == InputManager::Event::kTap) bridgeSystem.stepTranspose(-1); 
         else if (e == InputManager::Event::kLongHold) connectivityManager.startProvisioning();
+    });
+    inputManager.onEvent("MENU", [](InputManager::Event e){
+        // Disabled due to GPIO conflict
     });
 
     // 5. MIDI Hub Coordination

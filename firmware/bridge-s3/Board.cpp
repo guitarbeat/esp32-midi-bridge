@@ -39,7 +39,7 @@ public:
         delay(100);
 
         // 3. LCD Initialization
-        if (!display->begin(80000000)) { 
+        if (!display->begin(40000000)) { 
             return false;
         }
 
@@ -60,7 +60,9 @@ public:
 
     void setBacklight(uint8_t level) override {
         // Drive both potential backlight pins
+        pinMode(14, OUTPUT);
         digitalWrite(14, level > 0 ? HIGH : LOW);
+        pinMode(9, OUTPUT);
         digitalWrite(9, level > 0 ? HIGH : LOW);
     }
 
@@ -77,7 +79,7 @@ public:
         if (strcmp(name, "OK") == 0) return 0;
         if (strcmp(name, "UP") == 0) return 10;
         if (strcmp(name, "DOWN") == 0) return 11;
-        if (strcmp(name, "MENU") == 0) return 14; 
+        // MENU is disabled on this board as pin 14 is the display power gate
         return -1;
     }
 
