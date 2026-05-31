@@ -42,6 +42,8 @@ Replace the port with your board (`arduino-cli board list`).
 using the USB port. A background serial reader causes uploads to fail around
 80–280 KB with errors like “chip stopped responding” or “serial data stream stopped”.
 
+See also: [ESP32-S3 flash/display bring-up troubleshooting](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md).
+
 ### Prebuilt binary
 
 CI builds `./firmware/bridge-s3` and uploads `bridge-s3.ino.bin` as a

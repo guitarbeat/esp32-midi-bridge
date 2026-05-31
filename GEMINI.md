@@ -32,5 +32,6 @@ We follow the **Deep Module** philosophy (from John Ousterhout's *A Philosophy o
 
 ## Documentation
 
+- `docs/solutions/` — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas (e.g. ESP32-S3 flash, display bring-up).
 - Use **ADRs** (Architecture Decision Records) in `docs/adr/` for significant structural changes.
 - Keep `CONTEXT.md` updated as the domain language evolves.
