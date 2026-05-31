@@ -12,7 +12,6 @@
 #include "animation/BongoCat.h"
 
 BridgeUi bridgeUi;
-static constexpr int16_t kSidebarW = 54;
 
 void BridgeUi::begin(Arduino_GFX* gfx_ptr, int16_t backlight_pin)
 {
@@ -120,83 +119,74 @@ void BridgeUi::refresh(uint32_t nowMs, bool force)
 
     gfx->fillScreen(RGB565_BLACK);
 
-    // Sidebar
-    constexpr uint16_t kSideColor = RGB565(15, 15, 20);
-    constexpr uint16_t kBorderColor = RGB565(40, 40, 50);
-    gfx->fillRect(0, 0, kSidebarW, 240, kSideColor);
-    gfx->drawFastVLine(kSidebarW, 0, 240, kBorderColor);
+    // 1. Industrial Header (Flat Design 2.0)
+    constexpr uint16_t kHeaderColor = RGB565(20, 20, 30);
+    constexpr uint16_t kAccentColor = RGB565_CYAN;
+    gfx->fillRect(0, 0, 240, 32, kHeaderColor);
+    gfx->drawFastHLine(0, 32, 240, RGB565(60, 60, 80));
 
-    auto drawMetric = [&](int16_t y, const char* label, const char* value, uint16_t color) {
-        gfx->setTextColor(RGB565(80, 80, 100));
-        gfx->setTextSize(1); gfx->setCursor(8, y); gfx->print(label);
-        gfx->setTextColor(color);
-        gfx->setTextSize(2); gfx->setCursor(10, y + 10); gfx->print(value);
-    };
-
-    drawMetric(12, "TRANS", (String(engine_->transpose() > 0 ? "+" : "") + String(engine_->transpose())).c_str(), 
-               engine_->transpose() != 0 ? RGB565_GOLD : RGB565(120, 120, 140));
+    gfx->setTextSize(1);
+    gfx->setTextColor(bleOk ? kAccentColor : RGB565_DARKGRAY);
+    gfx->setCursor(10, 11); gfx->printf("BLE [%s]", bleOk ? "ON" : "OFF");
     
-    char chanBuf[8];
-    if (engine_->channelFilter() == 0) strcpy(chanBuf, "ALL"); else sprintf(chanBuf, "CH%u", engine_->channelFilter());
-    drawMetric(60, "FILTER", chanBuf, engine_->channelFilter() > 0 ? RGB565_GOLD : RGB565(120, 120, 140));
-    drawMetric(108, "MODE", displayModeName(), RGB565_CYAN);
+    gfx->setTextColor(connectivityManager.isConnected() ? kAccentColor : RGB565_DARKGRAY);
+    gfx->setCursor(75, 11); gfx->printf("WIFI [%s]", connectivityManager.isConnected() ? "RTP" : "---");
 
     if (board_) {
         const float v = board_->getBatteryVoltage();
         const uint16_t bColor = v > 3.7f ? RGB565_LIME : (v > 3.4f ? RGB565_GOLD : RGB565_RED);
-        gfx->drawRect(12, 210, 24, 12, RGB565(60, 60, 70));
-        gfx->fillRect(14, 212, (int)(((v-3.3f)/0.9f) * 20), 8, board_->isUsbPowered() ? RGB565_CYAN : bColor);
+        gfx->drawRect(185, 11, 22, 10, RGB565_DARKGRAY);
+        gfx->fillRect(207, 13, 2, 6, RGB565_DARKGRAY);
+        float lvl = (v - 3.3f) / 0.9f;
+        if (lvl > 1.0f) lvl = 1.0f; else if (lvl < 0.0f) lvl = 0.0f;
+        gfx->fillRect(187, 12, (int)(lvl * 18), 8, board_->isUsbPowered() ? kAccentColor : bColor);
+        gfx->setCursor(215, 11); gfx->setTextColor(RGB565_LIGHTGRAY); gfx->printf("%.1fV", v);
     }
 
-    // Main Console
-    const int16_t mainX = kSidebarW + 12;
-    gfx->setTextColor(RGB565_WHITE);
-    gfx->setTextSize(2);
-    gfx->setCursor(mainX, 10);
-    gfx->print("MIDI STATION");
-    gfx->drawFastHLine(mainX, 28, 240 - mainX - 12, kBorderColor);
+    // 2. Information Cards
+    auto drawCard = [&](int16_t x, int16_t y, int16_t w, int16_t h, const char* label, const char* value, uint16_t valColor) {
+        gfx->drawRoundRect(x, y, w, h, 6, RGB565(40, 40, 50));
+        gfx->setTextColor(RGB565(100, 100, 120));
+        gfx->setCursor(x + 8, y + 6); gfx->print(label);
+        gfx->setTextColor(valColor); gfx->setTextSize(2);
+        gfx->setCursor(x + 8, y + 18); gfx->print(value);
+        gfx->setTextSize(1);
+    };
 
-    if (shouldDrawStatusPanel()) {
-        auto drawSync = [&](int16_t x, int16_t y, const char* label, bool ok) {
-            uint16_t color = ok ? RGB565_LIME : RGB565(100, 100, 0);
-            gfx->drawRect(x, y, 78, 30, RGB565(30, 30, 40));
-            gfx->setTextSize(1); gfx->setTextColor(RGB565(120, 120, 130));
-            gfx->setCursor(x + 5, y + 4); gfx->print(label);
-            gfx->setTextColor(color); gfx->setCursor(x + 5, y + 16);
-            gfx->print(ok ? "[ ONLINE ]" : "[ OFFLINE ]");
-        };
-        drawSync(mainX, 36, "USB HOST", usbOk);
-        drawSync(mainX + 84, 36, "BLE MIDI", bleOk);
+    const char* usbName = (usb_ && usbOk) ? usb_->getDeviceName().substring(0, 12).c_str() : "DISCONNECTED";
+    drawCard(10, 42, 140, 44, "USB PIANO", usbName, usbOk ? RGB565_LIME : RGB565_GOLD);
+    
+    char transBuf[8]; snprintf(transBuf, sizeof(transBuf), "%+d", engine_->transpose());
+    drawCard(158, 42, 72, 44, "TRANS", transBuf, engine_->transpose() != 0 ? RGB565_GOLD : RGB565_LIGHTGRAY);
 
-        const int16_t logY = 78;
-        gfx->setTextSize(1); gfx->setTextColor(RGB565(100, 100, 120));
-        gfx->setCursor(mainX, logY); gfx->print("ACTIVITY STREAM");
-        gfx->fillRect(mainX, logY + 12, 162, 66, RGB565(10, 10, 15));
-        gfx->drawRect(mainX, logY + 12, 162, 66, RGB565(25, 25, 35));
-        
-        const uint16_t pulseColor = (nowMs / 1000) % 2 == 0 ? RGB565(40, 40, 60) : RGB565(20, 20, 30);
-        gfx->fillRect(mainX + 155, logY + 15, 4, 4, pulseColor);
+    // 3. Activity Console (Centered)
+    const int16_t logY = 96;
+    gfx->setTextColor(RGB565(100, 100, 120));
+    gfx->setCursor(10, logY); gfx->print("LIVE MONITOR");
+    
+    gfx->fillRect(10, logY + 12, 220, 54, RGB565(10, 10, 15));
+    gfx->drawRect(10, logY + 12, 220, 54, RGB565(30, 30, 40));
 
-        for (uint8_t i = 0; i < logCount(); i++) {
-            const auto* e = &logEntries()[(logHead_ - logCount_ + i + kMaxLogEntries) % kMaxLogEntries];
-            gfx->setTextColor(e->color); gfx->setCursor(mainX + 6, logY + 17 + (i * 12));
-            gfx->printf("> %s", e->text);
-        }
+    for (uint8_t i = 0; i < logCount(); i++) {
+        const auto* e = &logEntries()[(logHead_ - logCount_ + i + kMaxLogEntries) % kMaxLogEntries];
+        gfx->setTextColor(e->color); gfx->setCursor(18, logY + 18 + (i * 11));
+        gfx->printf("> %s", e->text);
     }
 
-    const bool active = lastMidiMs_ > 0 && nowMs - lastMidiMs_ < 400;
+    // 4. Bongo Cat (Centered and Adjusted)
     if (bongoCat_) {
+        const bool active = lastMidiMs_ > 0 && nowMs - lastMidiMs_ < 400;
         bongoCat_->update(nowMs, active, me.noteEventsSeen);
-        bongoCat_->draw(gfx, 95); 
+        // Center-align cat (128px wide) in 240px screen
+        bongoCat_->draw(gfx, (240 - 128) / 2); 
     }
 
-    drawOverlays(nowMs);
     drawToast(nowMs);
 }
 
 void BridgeUi::handleBoardButtons(uint32_t nowMs)
 {
-    auto handle = [&](Button& b, const char* name, std::function<void()> onShort, std::function<void()> onLong = nullptr, uint32_t longMs = 1000) {
+    auto handle = [&](Button& b, std::function<void()> onShort, std::function<void()> onLong = nullptr, uint32_t longMs = 1000) {
         if (b.pin < 0) return;
         bool pressed = (digitalRead(b.pin) == LOW);
         if (pressed && !b.down) { b.down = true; b.downMs = nowMs; b.actionFired = false; }
@@ -209,21 +199,21 @@ void BridgeUi::handleBoardButtons(uint32_t nowMs)
         }
     };
 
-    handle(okButton_, "OK", 
+    handle(okButton_, 
         [this, nowMs](){ cycleDisplayMode(); showToast(displayModeName(), nowMs); },
         [this, nowMs](){ sendAllNotesOff(); showToast("PANIC", nowMs); }, kOkPanicHoldMs);
 
-    handle(upButton_, "UP", [this, nowMs](){
+    handle(upButton_, [this, nowMs](){
         engine_->setTranspose(engine_->transpose() + 1);
         char t[16]; snprintf(t, sizeof(t), "Trans %+d", engine_->transpose()); showToast(t, nowMs);
     });
 
-    handle(downButton_, "DWN", [this, nowMs](){
+    handle(downButton_, [this, nowMs](){
         engine_->setTranspose(engine_->transpose() - 1);
         char t[16]; snprintf(t, sizeof(t), "Trans %+d", engine_->transpose()); showToast(t, nowMs);
     });
 
-    handle(menuButton_, "MENU", 
+    handle(menuButton_, 
         [this, nowMs](){ 
             bridgeSettings.cycleMidiChannelFilter();
             engine_->setChannelFilter(bridgeSettings.midiChannelFilter());
@@ -244,13 +234,8 @@ void BridgeUi::drawToast(uint32_t nowMs) {
 }
 void BridgeUi::sendAllNotesOff() { /* Panic logic */ }
 
-bool BridgeUi::shouldDrawFullMetrics() const {
-    return displayMode_ == DisplayMode::kFull;
-}
-
-bool BridgeUi::shouldDrawStatusPanel() const {
-    return displayMode_ == DisplayMode::kFull || displayMode_ == DisplayMode::kPerformance;
-}
+bool BridgeUi::shouldDrawFullMetrics() const { return displayMode_ == DisplayMode::kFull; }
+bool BridgeUi::shouldDrawStatusPanel() const { return displayMode_ == DisplayMode::kFull || displayMode_ == DisplayMode::kPerformance; }
 
 const char* BridgeUi::displayModeName() const
 {
@@ -261,124 +246,4 @@ const char* BridgeUi::displayModeName() const
         case DisplayMode::kStage: return "STAGE";
         default: return "UNKNOWN";
     }
-}
-
-void BridgeUi::drawOverlays(uint32_t nowMs)
-{
-    if (shouldDrawStatusPanel()) {
-        drawVelocityBar();
-        drawMiniKeyboard();
-        drawStatusChips(nowMs);
-    }
-}
-
-void BridgeUi::drawMiniKeyboard()
-{
-    if (gfx == nullptr || engine_ == nullptr) return;
-    const auto& me = engine_->state();
-
-    auto isPitchActive = [&](uint8_t pc) -> bool {
-        for (int note = pc; note < 128; note += 12) {
-            if (me.heldNotes[note]) {
-                return true;
-            }
-        }
-        return false;
-    };
-
-    constexpr int16_t kKeyboardX = 72;
-    constexpr int16_t kKeyboardY = 168;
-
-    // 1. Draw 15 White Keys (C4 to C6)
-    // Pitch class pattern for 15 white keys starting at C:
-    // C, D, E, F, G, A, B, C, D, E, F, G, A, B, C
-    const uint8_t whitePC[15] = {0, 2, 4, 5, 7, 9, 11, 0, 2, 4, 5, 7, 9, 11, 0};
-
-    for (int i = 0; i < 15; i++) {
-        int16_t x = kKeyboardX + i * 10;
-        bool active = isPitchActive(whitePC[i]);
-        uint16_t color = active ? RGB565(0, 180, 216) : RGB565(240, 240, 245);
-        gfx->fillRect(x, kKeyboardY, 9, 34, color);
-    }
-
-    // 2. Draw 10 Black Keys centered on borders
-    // Black keys exist to the right of white keys at index:
-    // Octave 1: 0 (C), 1 (D), 3 (F), 4 (G), 5 (A)
-    // Octave 2: 7 (C), 8 (D), 10 (F), 11 (G), 12 (A)
-    const uint8_t blackPC[10] = {1, 3, 6, 8, 10, 1, 3, 6, 8, 10};
-    const uint8_t leftWhiteIdx[10] = {0, 1, 3, 4, 5, 7, 8, 10, 11, 12};
-
-    for (int i = 0; i < 10; i++) {
-        uint8_t wIdx = leftWhiteIdx[i];
-        int16_t bx = kKeyboardX + (wIdx + 1) * 10 - 3;
-        bool active = isPitchActive(blackPC[i]);
-        uint16_t color = active ? RGB565_GOLD : RGB565(30, 30, 35);
-        gfx->fillRect(bx, kKeyboardY, 6, 20, color);
-    }
-}
-
-void BridgeUi::drawVelocityBar()
-{
-    if (gfx == nullptr || engine_ == nullptr) return;
-    const auto& me = engine_->state();
-
-    constexpr int16_t kKeyboardX = 72;
-    constexpr int16_t kVelocityY = 208;
-
-    int numActive = 0;
-    if (me.heldCount > 0 && me.lastVelocity > 0) {
-        numActive = (me.lastVelocity * 15) / 127;
-        if (numActive == 0) numActive = 1;
-    }
-
-    for (int i = 0; i < 15; i++) {
-        int16_t x = kKeyboardX + i * 10;
-        bool active = (i < numActive);
-
-        uint16_t color;
-        if (active) {
-            if (i < 9) {
-                color = RGB565(30, 200, 120);
-            } else if (i < 13) {
-                color = RGB565(250, 160, 20);
-            } else {
-                color = RGB565(255, 80, 80);
-            }
-        } else {
-            color = RGB565(40, 40, 45);
-        }
-
-        gfx->fillRect(x, kVelocityY, 9, 4, color);
-    }
-}
-
-void BridgeUi::drawStatusChips(uint32_t nowMs)
-{
-    if (gfx == nullptr || engine_ == nullptr) return;
-    const auto& me = engine_->state();
-
-    const bool usbOk = usb_ && usb_->isConnected();
-    const bool bleOk = ble && ble->isConnected();
-
-    constexpr int16_t kStartX = 147 - 57;
-    constexpr int16_t kChipY = 220;
-    constexpr int16_t kChipW = 34;
-    constexpr int16_t kChipH = 12;
-
-    auto drawBadge = [&](int16_t x, const char* label, bool active, uint16_t activeBgColor, uint16_t inactiveColor) {
-        if (active) {
-            gfx->fillRoundRect(x, kChipY, kChipW, kChipH, 2, activeBgColor);
-            gfx->setTextColor(RGB565_WHITE);
-        } else {
-            gfx->drawRoundRect(x, kChipY, kChipW, kChipH, 2, inactiveColor);
-            gfx->setTextColor(inactiveColor);
-        }
-        gfx->setTextSize(1);
-        gfx->setCursor(x + 8, kChipY + 2);
-        gfx->print(label);
-    };
-
-    drawBadge(kStartX, "USB", usbOk, RGB565(40, 180, 80), RGB565(60, 60, 70));
-    drawBadge(kStartX + 40, "BLE", bleOk, RGB565(0, 120, 240), RGB565(60, 60, 70));
-    drawBadge(kStartX + 80, "SUS", me.sustainDown, RGB565(240, 140, 0), RGB565(35, 35, 40));
 }
