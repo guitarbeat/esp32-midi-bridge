@@ -13,7 +13,7 @@
  */
 class UartConnection : public Transport {
 public:
-    UartConnection(HardwareSerial& serial = Serial2, int rxPin = 15, int txPin = 16);
+    UartConnection(HardwareSerial& serial, int rxPin = 15, int txPin = 16);
     
     bool begin(uint32_t baud = 31250);
     const char* name() const override { return "UART-MIDI"; }
