@@ -44,6 +44,11 @@ void BridgeUi::setBongoCat(BongoCatDisplay* bongoCat)
     bongoCat_ = bongoCat;
 }
 
+void BridgeUi::setBoard(Board* board)
+{
+    board_ = board;
+}
+
 void BridgeUi::notifyUsbStatus(bool connected)
 {
     usbConnected_ = connected;
@@ -193,8 +198,16 @@ void BridgeUi::refresh(uint32_t nowMs, bool force)
     drawMetric(108, "MODE", displayModeName(), RGB565_CYAN);
 
     // Status Chips (Bottom of sidebar)
-    // Simplified battery for refactor
-    gfx->drawRect(12, 210, 24, 12, RGB565(60, 60, 70));
+    if (board_) {
+        const float v = board_->getBatteryVoltage();
+        const bool isUsb = board_->isUsbPowered();
+        const uint16_t bColor = v > 3.7f ? RGB565_LIME : (v > 3.4f ? RGB565_GOLD : RGB565_RED);
+        gfx->drawRect(12, 210, 24, 12, RGB565(60, 60, 70));
+        gfx->fillRect(36, 213, 2, 6, RGB565(60, 60, 70));
+        float lvl = (v - 3.3f) / (4.2f - 3.3f);
+        if (lvl > 1.0f) lvl = 1.0f; else if (lvl < 0.0f) lvl = 0.0f;
+        gfx->fillRect(14, 212, (int)(lvl * 20), 8, isUsb ? RGB565_CYAN : bColor);
+    }
 
     // Main Console Area
     const int16_t mainX = kSidebarW + 12;

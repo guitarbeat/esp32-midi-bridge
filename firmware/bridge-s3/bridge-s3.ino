@@ -4,7 +4,7 @@
 #error "bridge-s3 requires an ESP32-S3 board with native USB-OTG host support."
 #endif
 
-#include <Arduino_GFX_Library.h>
+#include "Board.h"
 #include "USBConnection.h"
 #include "BLEConnection.h"
 #include "ConnectivityManager.h"
@@ -14,24 +14,10 @@
 #include "BridgeUi.h"
 #include "animation/BongoCat.h"
 
-// Hardware Configuration
-#define LCD_BACKLIGHT_PIN 14
-#define LCD_ENABLE_PIN -1
+// System Components
+static Board* board = createBoard();
+static Arduino_Canvas* canvas = nullptr;
 
-static Arduino_DataBus* bus = new Arduino_ESP32LCD8080(
-    45 /* DC */, 0 /* CS */, 47 /* WR */, 21 /* RD */,
-    39 /* D0 */, 40 /* D1 */, 41 /* D2 */, 42 /* D3 */,
-    45 /* D4 */, 46 /* D5 */, 47 /* D6 */, 48 /* D7 */);
-
-static Arduino_GFX* display = new Arduino_ST7789(
-    bus, -1 /* RST */, 0 /* rotation */, true /* IPS */,
-    240 /* width */, 240 /* height */,
-    0 /* col_offset1 */, 0 /* row_offset1 */,
-    0 /* col_offset2 */, 0 /* row_offset2 */);
-
-static Arduino_Canvas* canvas = new Arduino_Canvas(240, 240, display);
-
-// Modules
 static USBConnection usbMidi;
 static BLEConnection bleMidi;
 static BongoCatDisplay bongoCat;
@@ -39,40 +25,52 @@ static BongoCatDisplay bongoCat;
 void setup()
 {
     Serial.begin(115200);
-    bridgeSettings.begin("Piano BLE Bridge");
-
-    // Initialize UI and Engine
-    if (canvas->begin()) {
-        bridgeUi.begin(canvas, LCD_BACKLIGHT_PIN);
-        bridgeUi.setMidiEngine(&midiEngine);
-        bridgeUi.setBongoCat(&bongoCat);
+    
+    // 1. Hardware Bootstrap
+    if (!board->begin()) {
+        Serial.println("[SYSTEM] Hardware initialization failed.");
+        while(1) delay(100);
     }
     
-    // Initialize MIDI Bridge with Transports
+    // 2. Settings and Canvas
+    bridgeSettings.begin("Piano BLE Bridge");
+    canvas = new Arduino_Canvas(240, 240, board->getDisplay());
+    
+    // 3. UI and Engine Setup
+    if (canvas->begin()) {
+        bridgeUi.begin(canvas, -1 /* Managed by Board */);
+        bridgeUi.setMidiEngine(&midiEngine);
+        bridgeUi.setBongoCat(&bongoCat);
+        // In Candidate 1, we still need to link board to UI
+        // bridgeUi.setBoard(board);
+    }
+    
+    // 4. MIDI Hub Coordination
     midiBridge.begin(&bridgeSettings, &bridgeUi);
     midiBridge.addTransport(&usbMidi);
     midiBridge.addTransport(&bleMidi);
     midiBridge.addTransport(&connectivityManager);
 
-    // Start Hardware
+    // 5. Start Transports
     usbMidi.begin();
     bleMidi.begin(bridgeSettings.bleDeviceName());
     connectivityManager.begin();
     bongoCat.begin();
 
-    // Link UI pointers
+    // 6. Final UI Links
     bridgeUi.setUsbMidi(&usbMidi);
     bridgeUi.setBle(&bleMidi);
     bridgeUi.setMidiBridge(&midiBridge);
 
-    Serial.println("[SYSTEM] Deep Module architecture initialized.");
+    Serial.println("[SYSTEM] Board-abstracted architecture initialized.");
 }
 
 void loop()
 {
     const uint32_t now = millis();
     
-    // Process All Modules
+    // Periodic Maintenance
+    board->task();
     usbMidi.task();
     bleMidi.task();
     connectivityManager.task();
@@ -82,5 +80,5 @@ void loop()
     bridgeUi.refresh(now);
     canvas->flush();
     
-    vTaskDelay(1);
+    vTaskDelay(pdMS_TO_TICKS(1));
 }

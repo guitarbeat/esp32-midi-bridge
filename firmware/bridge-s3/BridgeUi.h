@@ -5,6 +5,7 @@
 #include <Arduino_GFX_Library.h>
 
 class BLEConnection;
+class Board;
 class BongoCatDisplay;
 class MidiBridge;
 class MidiEngine;
@@ -27,6 +28,7 @@ public:
     void setMidiBridge(MidiBridge* bridge);
     void setMidiEngine(MidiEngine* engine);
     void setBongoCat(BongoCatDisplay* bongoCat);
+    void setBoard(Board* board);
     uint32_t backlightDimMs() const;
 
     void notifyMidiEvent(const uint8_t* data);
@@ -58,11 +60,33 @@ public:
     uint8_t logCount() const { return logCount_; }
 
 private:
+    struct Button {
+        int pin = -1;
+        bool down = false;
+        uint32_t downMs = 0;
+        bool actionFired = false;
+    };
+
+    static constexpr uint32_t kShortPressMaxMs = 400;
+    static constexpr uint32_t kOkPanicHoldMs = 1000;
+    static constexpr uint32_t kOkPauseHoldMs = 2500;
+    static constexpr uint32_t kMenuLongHoldMs = 1000;
+    static constexpr uint32_t kMenuWifiSetupHoldMs = 4000;
+
+    void handleBoardButtons(uint32_t nowMs);
+    void cycleDisplayMode();
+    void toggleBridgePaused();
+    void showToast(const char* text, uint32_t nowMs);
+    void drawToast(uint32_t nowMs);
+    void setBacklight(uint8_t level);
+    bool isButtonPressed(int pin);
+
     Arduino_GFX* gfx = nullptr;
     BLEConnection* ble = nullptr;
     USBConnection* usb_ = nullptr;
     MidiBridge* midiBridge_ = nullptr;
     MidiEngine* engine_ = nullptr;
+    Board* board_ = nullptr;
     BongoCatDisplay* bongoCat_ = nullptr;
     int16_t backlightPin = -1;
 
