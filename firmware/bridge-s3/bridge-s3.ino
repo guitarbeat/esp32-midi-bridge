@@ -28,6 +28,13 @@ void setup()
 {
     Serial.begin(115200);
     
+    // Wait for native USB CDC Serial connection to establish so we don't miss boot logs
+    uint32_t startWait = millis();
+    while (!Serial && (millis() - startWait < 5000)) {
+        delay(10);
+    }
+    Serial.println("\n[SYSTEM] Native USB CDC Serial connected. Booting...");
+    
     // 1. Hardware Bootstrap
     if (!board->begin()) {
         Serial.println("[SYSTEM] Hardware initialization failed.");
@@ -83,7 +90,7 @@ void setup()
     midiBridge.addTransport(&connectivityManager);
 
     // 6. Start Transports
-    usbMidi.begin();
+    // usbMidi.begin(); // Temporarily disabled to keep USB CDC active for serial diagnostics
     bleMidi.begin(bridgeSystem.settings().bleDeviceName());
     if (bridgeSystem.settings().uartEnabled()) {
         uartMidi.begin(bridgeSystem.settings().uartBaudRate());

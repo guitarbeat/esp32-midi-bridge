@@ -1,20 +1,20 @@
 #include "UartConnection.h"
 
 UartConnection::UartConnection(HardwareSerial& serial, int rxPin, int txPin)
-    : serial_(serial), rxPin_(rxPin), txPin_(txPin), parser_(onMidiReceived, this), initialized_(false)
+    : serial_(&serial), rxPin_(rxPin), txPin_(txPin), parser_(onMidiReceived, this), initialized_(false)
 {
 }
 
 bool UartConnection::begin(uint32_t baud) {
-    serial_.begin(baud, SERIAL_8N1, rxPin_, txPin_);
-    serial_.setTimeout(0); // Non-blocking readBytes
+    serial_->begin(baud, SERIAL_8N1, rxPin_, txPin_);
+    serial_->setTimeout(0); // Non-blocking readBytes
     initialized_ = true;
     return true;
 }
 
 bool UartConnection::sendMidi(const uint8_t* packet, size_t length) {
     if (!initialized_ || packet == nullptr || length == 0) return false;
-    serial_.write(packet, length);
+    serial_->write(packet, length);
     return true;
 }
 
@@ -22,10 +22,10 @@ void UartConnection::task() {
     if (!initialized_) return;
     
     uint8_t buffer[64];
-    int available = serial_.available();
+    int available = serial_->available();
     if (available > 0) {
         if (available > (int)sizeof(buffer)) available = sizeof(buffer);
-        int read = serial_.readBytes(buffer, available);
+        int read = serial_->readBytes(buffer, available);
         parser_.parse(buffer, read);
     }
 }
