@@ -11,9 +11,8 @@
 
 MidiBridge midiBridge;
 
-void MidiBridge::begin(BridgeSettings* settings, BridgeUi* ui)
+void MidiBridge::begin(BridgeUi* ui)
 {
-    settings_ = settings;
     ui_ = ui;
 }
 

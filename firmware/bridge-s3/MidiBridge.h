@@ -24,7 +24,7 @@ public:
         kForwarded,
     };
 
-    void begin(BridgeSettings* settings, BridgeUi* ui);
+    void begin(BridgeUi* ui);
     void setMidiEngine(MidiEngine* engine);
     
     /** @brief Adds a transport to the bridge. The bridge will route messages to/from it. */
@@ -36,7 +36,6 @@ public:
     const Counters& counters() const { return counters_; }
 
 private:
-    BridgeSettings* settings_ = nullptr;
     BridgeUi* ui_ = nullptr;
     MidiEngine* engine_ = nullptr;
     std::vector<Transport*> transports_;

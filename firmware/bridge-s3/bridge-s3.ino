@@ -73,7 +73,7 @@ void setup()
     });
 
     // 5. MIDI Hub Coordination
-    midiBridge.begin(&bridgeSystem.settings(), &bridgeUi);
+    midiBridge.begin(&bridgeUi);
     midiBridge.setMidiEngine(&bridgeSystem.engine());
     midiBridge.addTransport(&usbMidi);
     midiBridge.addTransport(&bleMidi);
