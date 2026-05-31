@@ -92,14 +92,3 @@ void MidiBridge::onMidiReceived(Transport* source, const uint8_t* data, size_t l
     // Route it
     route(source, data, length);
 }
-
-MidiBridge::Result MidiBridge::forward(const uint8_t* data, size_t length, uint8_t outMidiPacket[4])
-{
-    // Legacy shim
-    (void)outMidiPacket;
-    // We assume 'data' here is 4-byte USB (CIN+Status+D1+D2)
-    if (length >= 4) {
-        onMidiReceived(nullptr, data + 1, 3);
-    }
-    return Result::kForwarded;
-}
