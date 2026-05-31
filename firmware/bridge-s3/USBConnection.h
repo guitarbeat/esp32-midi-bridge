@@ -1,6 +1,6 @@
-// Originally based on ESP32_Host_MIDI by Saulo Veríssimo 
-// https://github.com/sauloverissimo/ESP32_Host_MIDI 
-// Modified by Liam Jones, 2025
+// USB host MIDI transport for ESP32-S3 native OTG.
+// Based on ESP32_Host_MIDI (Saulo Veríssimo), touchgadget esp32-usb-host-demos,
+// and patterns from esp32-usb-host-midi-library / Omocha (MIT, enudenki).
 
 #ifndef USB_CONNECTION_H
 #define USB_CONNECTION_H
@@ -10,10 +10,11 @@
 #include <freertos/portmacro.h>
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
+#include <freertos/queue.h>
 #include "Transport.h"
 
-// Structure to store a raw USB packet.
-// Although transfers can be up to 64 bytes, only the first 4 are relevant per USB-MIDI event.
+class Board;
+
 struct RawUsbMessage {
     uint8_t data[64];
     size_t length;
@@ -21,90 +22,78 @@ struct RawUsbMessage {
 
 class USBConnection : public Transport {
 public:
+    static constexpr int kNumMidiInTransfers = 2;
+    static constexpr int kMidiOutQueueDepth = 128;
+
     USBConnection();
 
-    // Initializes the USB Host, registers the client, and starts the USB task on core 0.
-    bool begin();
+    bool begin(Board* board = nullptr);
 
-    // Drains the ring buffer and forwards MIDI data.
     void task() override;
 
-    // Transport implementation
     const char* name() const override { return "USB-HOST"; }
     bool isConnected() const override { return isReady; }
     bool sendMidi(const uint8_t* packet, size_t length) override { return sendMidiMessage(packet, length); }
 
-    // Returns whether the USB MIDI interface exposes an OUT endpoint.
-    bool canSend() const { return outTransfer != nullptr; }
-
-    // Sends raw MIDI bytes to the connected USB MIDI device.
+    bool canSend() const { return outTransfer != nullptr && midiOutQueue != nullptr; }
     bool sendMidiMessage(const uint8_t* data, size_t length);
 
-    // Returns the last error message (empty if none).
     const String& getLastError() const { return lastError; }
-
-    // Returns the FreeRTOS task handle for the USB event task.
     TaskHandle_t getTaskHandle() const { return usbTaskHandle; }
-
-    // USB product or manufacturer string from enumeration (empty if unavailable).
     const String& getDeviceName() const { return deviceName; }
 
-    // Virtual callback to forward raw MIDI data (4 bytes: CIN + 3 MIDI bytes).
-    // Upper layer should override this method to process the data.
     virtual void onMidiDataReceived(const uint8_t* data, size_t length);
-
-    // Connection callbacks (empty by default).
     virtual void onDeviceConnected();
     virtual void onDeviceDisconnected();
 
-    // Queue access methods (for debugging or external analysis)
     int getQueueSize() const;
     const RawUsbMessage& getQueueMessage(int index) const;
 
 protected:
     volatile bool isReady;
-    uint8_t interval;         // Polling interval (ms)
+    uint8_t interval;
     unsigned long lastCheck;
 
     usb_host_client_handle_t clientHandle;
     usb_device_handle_t deviceHandle;
     uint32_t eventFlags;
-    usb_transfer_t* midiTransfer;
+    usb_transfer_t* midiInTransfers[kNumMidiInTransfers];
     usb_transfer_t* outTransfer;
+    QueueHandle_t midiOutQueue;
     volatile bool outTransferBusy;
 
-    // Ring buffer for raw USB packets.
-    // Protected by spinlock for thread-safe access on dual-core ESP32.
-    static const int QUEUE_SIZE = 64;
+    static constexpr int QUEUE_SIZE = 64;
     RawUsbMessage usbQueue[QUEUE_SIZE];
     volatile int queueHead;
     volatile int queueTail;
-    volatile bool transferInFlight;
     portMUX_TYPE queueMux;
 
-    // Connection control data
     bool firstMidiReceived;
-    bool isMidiDeviceConfirmed;
     int8_t midiInterfaceNumber;
     String deviceName;
     String lastError;
+    Board* board_;
 
-    // Helper functions to manage the queue.
     bool enqueueMidiMessage(const uint8_t* data, size_t length);
-    bool dequeueMidiMessage(RawUsbMessage &msg);
+    bool dequeueMidiMessage(RawUsbMessage& msg);
     void processQueue();
+    void processMidiOutQueue();
 
-    // Dedicated FreeRTOS task for USB event handling (core 0)
     TaskHandle_t usbTaskHandle;
     static void _usbTask(void* arg);
 
-    // Internal USB Host callbacks.
-    static void _clientEventCallback(const usb_host_client_event_msg_t *eventMsg, void *arg);
-    static void _onReceive(usb_transfer_t *transfer);
-    static void _onSendComplete(usb_transfer_t *transfer);
-    void _processConfig(const usb_config_desc_t *config_desc);
+    static void _clientEventCallback(const usb_host_client_event_msg_t* eventMsg, void* arg);
+    static void _onReceive(usb_transfer_t* transfer);
+    static void _onSendComplete(usb_transfer_t* transfer);
+
+    void _parseConfig(const usb_config_desc_t* config_desc);
+    void _findAndClaimMidiInterface(const usb_intf_desc_t* intf);
+    void _setupMidiEndpoint(const usb_ep_desc_t* endpoint);
+    void _setupMidiInEndpoint(const usb_ep_desc_t* endpoint);
+    void _setupMidiOutEndpoint(const usb_ep_desc_t* endpoint);
+    bool _tryEndpointFallback();
     void loadDeviceName();
     void handleDeviceRemoved();
 };
 
-#endif // USB_CONNECTION_H
+#endif

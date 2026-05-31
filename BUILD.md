@@ -8,6 +8,22 @@
   - `USB Host Shield Library 2.0` (classic MAX3421E fallback only)
   - `GFX Library for Arduino` (ESP32-S3 display build only)
 
+## Helper scripts
+
+| Script | Purpose |
+|--------|---------|
+| [`scripts/flash-bridge-s3.sh`](scripts/flash-bridge-s3.sh) | Compile, upload, post-flash `esptool run`; checks port is free |
+| [`scripts/verify-boot.sh`](scripts/verify-boot.sh) | Capture boot log; verify LCD/canvas markers (`--flash` to flash first) |
+| [`read_serial.py`](read_serial.py) | Stream USB Serial/JTAG logs; `--reset` for watchdog reset; close before flash |
+| [`scripts/wifi_log.py`](scripts/wifi_log.py) | Receive Wi-Fi UDP debug logs on port 3333 (`ENABLE_WIFI_DEBUG=1`) |
+| [`scripts/test.sh`](scripts/test.sh) | Host-side unit tests |
+
+**Standard FQBN** (use everywhere for ESP32-S3-USB-OTG):
+
+```text
+esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc
+```
+
 ## Product Firmware (ESP32-S3)
 
 Official Espressif **ESP32-S3-USB-OTG** board — 8 MB flash, no external PSRAM:
@@ -44,6 +60,42 @@ using the USB port. A background serial reader causes uploads to fail around
 
 See also: [ESP32-S3 flash/display bring-up troubleshooting](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md).
 
+### Boot verification checklist
+
+After flashing, confirm the app is running (not stuck in download mode):
+
+```bash
+./scripts/verify-boot.sh          # capture serial + check markers
+./scripts/verify-boot.sh --flash  # flash then verify
+python3 read_serial.py --reset    # watchdog reset, then stream logs
+```
+
+Required serial markers:
+
+- `[LCD] display->begin OK`
+- `[SYSTEM] Display canvas initialized.`
+
+Must **not** appear: `waiting for download`, `quad_psram`
+
+### Optional: Wi-Fi debug logging
+
+When USB host mode is active, native USB CDC (`usbmodem`) may stop because D+/D− are switched to the Type-A host port. For runtime diagnostics, enable Wi-Fi UDP logging (Omocha-style, port **3333**):
+
+```bash
+arduino-cli compile \
+  --build-property 'build.extra_flags=-DENABLE_WIFI_DEBUG=1' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
+  ./firmware/bridge-s3
+```
+
+On your Mac (same LAN as the board, after Wi-Fi provisioning):
+
+```bash
+python3 scripts/wifi_log.py
+```
+
+USB/BLE/SYSTEM log lines that use `BRIDGE_LOG` in firmware are mirrored over UDP when Wi-Fi is connected.
+
 ### Prebuilt binary
 
 CI builds `./firmware/bridge-s3` and uploads `bridge-s3.ino.bin` as a
@@ -60,7 +112,7 @@ back to the USB device (only if the device exposes a USB MIDI OUT endpoint):
 ```bash
 arduino-cli compile \
   --build-property 'build.extra_flags=-DENABLE_BLE_TO_USB=1' \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
 
@@ -69,7 +121,7 @@ arduino-cli compile \
 ```bash
 arduino-cli compile \
   --build-property 'build.extra_flags=-DDEBUG_USB=1' \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
 
@@ -102,7 +154,7 @@ Backlight dims after the configured idle period; any MIDI activity wakes it.
 ```bash
 arduino-cli compile \
   --build-property 'build.extra_flags=-DBLE_DEVICE_NAME_TEXT=\"My Piano Bridge\"' \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
 
@@ -138,13 +190,13 @@ When the board is on your WiFi (after RTP setup), you can flash new firmware **w
 # By mDNS hostname (macOS usually resolves .local)
 arduino-cli upload \
   -p piano-ble-bridge.local \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 
 # Or use the IP shown on the display (RTP x.x.x.x line)
 arduino-cli upload \
   -p 192.168.1.42 \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
 
@@ -194,19 +246,25 @@ If the board disappears from `/dev/cu.*` after USB host firmware runs:
    `--upload-property upload.speed=460800`
 4. Manual download mode: hold **BOOT**, tap **RESET**, release **BOOT**, then upload.
 
+### Boot reboot loop after `[LCD] display->begin OK`
+
+Serial repeats `ESP-ROM` and never reaches `[SYSTEM] Display canvas initialized.` — usually USB host rails were enabled inside `Board::begin()`. Current firmware defers them to `enableUsbHostPower()` (called from `USBConnection::begin()` after canvas init). Reflash with `./scripts/flash-bridge-s3.sh` and verify with `./scripts/verify-boot.sh`.
+
 ## USB host power pins (ESP32-S3-USB-OTG)
 
-The sketch drives these before starting USB host:
+`USBConnection::begin()` calls `Board::enableUsbHostPower()` after `usb_host_install`:
 
 | GPIO | Role |
 | --- | --- |
-| 18 | High = Type-A host mux selected |
+| 18 | High = Type-A host mux selected (D+/D− routed to host port) |
 | 12 | High = host VBUS from USB_DEV power path |
 | 17 | High = current-limited host power switch |
 | 13 | Low = battery boost disabled (default) |
 
-Micro-USB can power the MCU and display while the Type-A port still needs VBUS from
-**USB_DEV** or battery for many keyboards.
+Display init in `Board::begin()` runs **before** USB host rails. LCD enable is GPIO 5 (LOW); backlight is GPIO 9.
+
+Micro-USB / USB Serial/JTAG can power the MCU and display while the Type-A port still needs VBUS from
+**USB_DEV** or battery for many keyboards. After host mux switches, CDC logging may stop — use Wi-Fi debug (above).
 
 ## Hardware reality check
 

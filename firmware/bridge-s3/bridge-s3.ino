@@ -6,6 +6,8 @@
 
 #include "Board.h"
 #include "InputManager.h"
+#include "BridgeLog.h"
+#include "WifiDebugLog.h"
 #include "USBConnection.h"
 #include "BLEConnection.h"
 #include "UartConnection.h"
@@ -34,6 +36,7 @@ void setup()
         delay(10);
     }
     Serial.println("\n[SYSTEM] Native USB CDC Serial connected. Booting...");
+    wifiDebugLogBegin();
     
     // 1. Hardware Bootstrap
     if (!board->begin()) {
@@ -96,8 +99,10 @@ void setup()
     }
     midiBridge.addTransport(&connectivityManager);
 
-    // 6. Start Transports
-    // usbMidi.begin(); // Temporarily disabled to keep USB CDC active for serial diagnostics
+    // 6. Start Transports (USB host rails switch PHY after usb_host_install)
+    if (!usbMidi.begin(board)) {
+        BRIDGE_LOG_LN("[USB] Host init failed — check VBUS / USB_DEV power");
+    }
     bleMidi.begin(bridgeSystem.settings().bleDeviceName());
     if (bridgeSystem.settings().uartEnabled()) {
         uartMidi.begin(bridgeSystem.settings().uartBaudRate());

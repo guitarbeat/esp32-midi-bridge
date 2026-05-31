@@ -36,6 +36,9 @@ public:
     /** @brief Optional periodic hardware maintenance (e.g. smoothing ADC reads). */
     virtual void task() {}
 
+    /** @brief Enable USB host power rails (board-specific; call after usb_host_install). */
+    virtual void enableUsbHostPower() {}
+
     /** @brief DIN MIDI UART RX pin (must not be GPIO 43/44 on ESP32-S3). */
     virtual int uartMidiRxPin() const { return 48; }
 

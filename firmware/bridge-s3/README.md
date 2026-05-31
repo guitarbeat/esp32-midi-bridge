@@ -22,27 +22,34 @@ ESP32-WROOM-32 modules cannot host a USB MIDI keyboard through firmware alone.
 - A class-compliant USB MIDI keyboard or controller.
 - Optional separate USB cable/port for flashing and serial logs, depending on the board.
 
-The official Espressif ESP32-S3-USB-OTG Development Board is supported. Its
-display shows the firmware status and the Bluetooth MIDI name at boot.
+The official Espressif **ESP32-S3-USB-OTG** development board is the primary target (8 MB flash, **no external PSRAM**). Its display shows firmware status and the Bluetooth MIDI name at boot.
 
-## Arduino IDE Settings
+## Build and flash (ESP32-S3-USB-OTG)
 
-1. Install `esp32 by Espressif Systems` in Boards Manager.
-2. Select an ESP32-S3 board, usually `ESP32S3 Dev Module`.
-3. Set `Tools > USB Mode` to `USB Host`.
-4. Set PSRAM/flash options to match your board.
-5. Open `bridge-s3.ino` and upload.
+Use the board-specific FQBN from [BUILD.md](../../BUILD.md):
 
-The sketch folder includes its own `USBConnection` and `BLEConnection` helper files so it can be opened directly in Arduino IDE.
+```bash
+./scripts/flash-bridge-s3.sh
+./scripts/verify-boot.sh          # capture boot log + check LCD markers
+./scripts/verify-boot.sh --flash  # flash then verify
+python3 read_serial.py --reset    # watchdog reset, then stream logs
+python3 read_serial.py            # close before flashing
+```
+
+Do **not** enable PSRAM on the ESP32-S3-USB-OTG board.
+
+**Init order:** `Board::begin()` brings up the LCD only. USB host power rails (GPIO 12/13/17/18) run later in `Board::enableUsbHostPower()`, called from `USBConnection::begin()` after the canvas is ready. Enabling host rails inside `Board::begin()` caused a reboot loop right after `[LCD] display->begin OK`.
+
+When USB host mode is active, native USB CDC may stop. Enable Wi-Fi debug logging (see [BUILD.md](../../BUILD.md)) and run `python3 scripts/wifi_log.py`.
+
+Design reference: [full-stack milestone design](../../docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md).
 
 ## Test
 
-1. Open Serial Monitor at `115200`.
-2. Confirm `USB Host initialized`.
-3. Connect the keyboard to the ESP32-S3 OTG port.
-4. Confirm `MIDI device connected`.
-5. Open GarageBand, AUM, or another iOS MIDI app.
-6. Use the app's Bluetooth MIDI device menu and connect to `Piano BLE Bridge`.
-7. Press keys and confirm the app receives notes.
+1. Flash with `./scripts/flash-bridge-s3.sh` and confirm `./scripts/verify-boot.sh` passes.
+2. Connect the keyboard to the Type-A **host** port; power **USB_DEV** for VBUS if needed.
+3. Open a BLE MIDI app and connect to `Piano BLE Bridge`.
+4. Press keys and confirm the app receives notes.
+5. Optional: `python3 scripts/wifi_log.py` when `ENABLE_WIFI_DEBUG=1` is set at compile time.
 
-The serial log prints USB/BLE connection state and basic MIDI event details.
+The serial or Wi-Fi log prints USB/BLE connection state and basic MIDI event details.

@@ -41,13 +41,7 @@ public:
         pinMode(9, OUTPUT);
         digitalWrite(9, HIGH);
 
-        // 2. USB host power
-        pinMode(18 /* SEL */, OUTPUT); digitalWrite(18, HIGH);
-        pinMode(12 /* VBUS */, OUTPUT); digitalWrite(12, HIGH);
-        pinMode(17 /* LIMIT */, OUTPUT); digitalWrite(17, HIGH);
-        pinMode(13 /* BOOST */, OUTPUT); digitalWrite(13, LOW);
-
-        // 3. Buttons
+        // 2. Buttons
         pinMode(0 /* OK/Boot */, INPUT_PULLUP);
         pinMode(10 /* UP */, INPUT_PULLUP);
         pinMode(11 /* DOWN */, INPUT_PULLUP);
@@ -81,6 +75,22 @@ public:
         if (strcmp(name, "DOWN") == 0) return 11;
         if (strcmp(name, "MENU") == 0) return 14;
         return -1;
+    }
+
+    void enableUsbHostPower() override {
+        Serial.println("[USB] Enabling host power rails...");
+        Serial.flush();
+        pinMode(18 /* SEL */, OUTPUT);
+        digitalWrite(18, HIGH);
+        pinMode(12 /* VBUS */, OUTPUT);
+        digitalWrite(12, HIGH);
+        pinMode(17 /* LIMIT */, OUTPUT);
+        digitalWrite(17, HIGH);
+        pinMode(13 /* BOOST */, OUTPUT);
+        digitalWrite(13, LOW);
+        delay(500);
+        Serial.println("[USB] Host power rails stable.");
+        Serial.flush();
     }
 
 private:

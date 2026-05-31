@@ -6,8 +6,8 @@ You are an expert embedded software engineer working on the Piano BLE Bridge. Th
 
 - **Main Firmware**: `firmware/bridge-s3` (ESP32-S3 with native USB-OTG).
 - **Fallback Firmware**: `bridge-classic` (Classic ESP32 + MAX3421E).
-- **Hardware**: Espressif ESP32-S3-USB-OTG is the primary target.
-- **Framework**: Arduino-ESP32 (Core 3.0+).
+- **Hardware**: Espressif ESP32-S3-USB-OTG is the primary target (8 MB flash, no PSRAM).
+- **Framework**: Arduino-ESP32 (Core 3.3.x).
 
 ## Architectural Principles
 
@@ -25,13 +25,23 @@ We follow the **Deep Module** philosophy (from John Ousterhout's *A Philosophy o
 - **Refactoring**: When improving code, aim to "deepen" modules. Move logic from `bridge-s3.ino` into dedicated modules (e.g., `BridgeUi`, `ConnectivityManager`).
 - **Instructions**: Each major subdirectory has its own `GEMINI.md` with scoped instructions.
 
-## Build & Test
+## Build, Flash & Verify
 
-- **Build**: Use `arduino-cli`. See `BUILD.md` for specific FQBN and flags.
-- **Validation**: Before committing changes, ensure the code compiles. Run unit tests using `./scripts/test.sh`.
+- **FQBN**: `esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc` — never `PSRAM=enabled`.
+- **Flash**: `./scripts/flash-bridge-s3.sh` (close `read_serial.py` first).
+- **Verify boot**: `./scripts/verify-boot.sh` — requires `[LCD] display->begin OK` and no `waiting for download`.
+- **Serial logs**: `python3 read_serial.py --reset`
+- **Wi-Fi logs** (when host mode kills CDC): compile with `-DENABLE_WIFI_DEBUG=1`, run `python3 scripts/wifi_log.py`.
+- **Unit tests**: `./scripts/test.sh`
 
 ## Documentation
 
-- `docs/solutions/` — documented solutions to past problems (bugs, best practices, workflow patterns), organized by category with YAML frontmatter (`module`, `tags`, `problem_type`). Relevant when implementing or debugging in documented areas (e.g. ESP32-S3 flash, display bring-up).
-- Use **ADRs** (Architecture Decision Records) in `docs/adr/` for significant structural changes.
+- `AGENTS.md` — learned user preferences and durable workspace facts (flash, FQBN, init order).
+- `docs/solutions/` — documented fixes (e.g. [ESP32-S3 flash/display bring-up](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md)).
+- `docs/superpowers/specs/` — design specs (e.g. [full-stack milestone](docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md)).
+- Use **ADRs** in `docs/adr/` for significant structural changes.
 - Keep `CONTEXT.md` updated as the domain language evolves.
+
+## Verification discipline
+
+Do not claim flash/display/USB fixes work without runtime evidence: successful upload, boot log markers, and (when applicable) working display or MIDI path.

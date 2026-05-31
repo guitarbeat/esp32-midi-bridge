@@ -37,7 +37,7 @@ MIDI adapter). This project is an open, hackable replacement for that device:
 - **NVS settings**: transpose, MIDI channel filter, display mode, backlight timeout (saved across reboots).
 - **Link health** on Full display: USB→BLE forwarding latency (when connected).
 - **Stage display mode**: cat-focused view with status hidden.
-- Reproducible Arduino CLI builds and prebuilt firmware binaries from CI.
+- Reproducible Arduino CLI builds, helper scripts (`flash-bridge-s3.sh`, `verify-boot.sh`), and prebuilt firmware binaries from CI.
 
 ## Current Limits
 
@@ -46,6 +46,7 @@ MIDI adapter). This project is an open, hackable replacement for that device:
   are receive-only over USB, so this rarely applies.
 - Bluetooth audio is not supported.
 - Some keyboards need 5 V VBUS on the host port before they enumerate.
+- After USB host starts, native USB serial (`usbmodem`) may stop — use Wi-Fi debug logging for runtime diagnostics (see [BUILD.md](BUILD.md)).
 - BLE MIDI latency depends on the receiving device and app.
 
 ## MIDI 2.0
@@ -77,9 +78,11 @@ ESP32-S3 board with USB-OTG host. This repo is tested on the official Espressif
 
 Wiring for that board:
 
-- Micro-USB **USB-to-UART** — flash firmware and serial logs.
+- **USB Serial/JTAG** (shows as `/dev/cu.usbmodem*` on macOS) — flash firmware and early boot logs.
 - Type-A **USB HOST** — piano or MIDI controller.
 - **USB_DEV** — 5 V power so the host port can supply VBUS to the keyboard.
+
+Once USB host mode is active, D+/D− are switched to the host port and CDC may drop. Use `python3 scripts/wifi_log.py` with `ENABLE_WIFI_DEBUG=1` for runtime logs over Wi-Fi.
 
 ### Fallback: Classic ESP32 + MAX3421E
 
@@ -90,9 +93,12 @@ Classic ESP32 boards cannot host USB MIDI from their onboard USB connector alone
 ## Quick Start
 
 1. **Get hardware** — ESP32-S3-USB-OTG (recommended) or classic ESP32 + MAX3421E.
-2. **Flash firmware** — download the latest `bridge-s3` `.bin` from the
-   [GitHub Actions](https://github.com/guitarbeat/esp32-cyd-midi-ble-bridge/actions)
-   workflow artifacts, or build with Arduino CLI (see [BUILD.md](BUILD.md)).
+2. **Flash firmware** — recommended one-liner:
+   ```bash
+   ./scripts/flash-bridge-s3.sh
+   ./scripts/verify-boot.sh
+   ```
+   Or download the latest `bridge-s3` `.bin` from [GitHub Actions](https://github.com/guitarbeat/esp32-cyd-midi-ble-bridge/actions) and see [BUILD.md](BUILD.md).
 3. **Wire the piano** — keyboard → Type-A host; board powered (including `USB_DEV` on the OTG board).
 4. **Pair in your app** — open GarageBand (or your MIDI app) → Bluetooth MIDI devices → connect to **Piano BLE Bridge**.
 5. **Play** — the display should show USB OK and BLE connected; note events should appear in the app.
@@ -109,14 +115,22 @@ Change it by editing `BLE_DEVICE_NAME_TEXT` in the sketch or passing a build fla
 Contributor-oriented steps live in [BUILD.md](BUILD.md). Short version:
 
 ```bash
+./scripts/flash-bridge-s3.sh
+```
+
+Or manually:
+
+```bash
 arduino-cli config add board_manager.additional_urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
 arduino-cli core update-index
 arduino-cli core install esp32:esp32
 arduino-cli lib install "USB Host Shield Library 2.0" "GFX Library for Arduino"
 arduino-cli compile \
-  --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
+  --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
+
+Do **not** use `PSRAM=enabled` on the ESP32-S3-USB-OTG board.
 
 ## Pairing
 
@@ -127,6 +141,18 @@ arduino-cli compile \
 5. Connect to **Piano BLE Bridge** and play a few keys.
 
 ## Troubleshooting
+
+### Blank Display or Serial Shows `waiting for download`
+
+- Close `read_serial.py` and Serial Monitor before flashing.
+- Use `./scripts/flash-bridge-s3.sh`, then `./scripts/verify-boot.sh`.
+- Press **RESET** once (do not hold BOOT) if the display stays blank after upload.
+- Capture boot log: `python3 read_serial.py --reset` — expect `[LCD] display->begin OK`.
+- See [flash/display bring-up troubleshooting](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md).
+
+### Boot reboot loop (`display->begin OK` then reset)
+
+If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized.`, the firmware may be enabling USB host rails too early. Reflash current `main` and run `./scripts/verify-boot.sh`. See [troubleshooting doc](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md).
 
 ### The Piano Does Not Connect Over USB
 
@@ -163,18 +189,26 @@ sketch or switch to an ESP32-S3 native USB host board.
 
 ## Upstream Reference
 
-USB host and BLE patterns are inspired by
-[sauloverissimo/ESP32_Host_MIDI](https://github.com/sauloverissimo/ESP32_Host_MIDI)
-(MIT). This repo is a **single-purpose bridge**, not a copy of that multi-transport library.
+USB host patterns build on [sauloverissimo/ESP32_Host_MIDI](https://github.com/sauloverissimo/ESP32_Host_MIDI) (MIT), [touchgadget/esp32-usb-host-demos](https://github.com/touchgadget/esp32-usb-host-demos), and ideas from [enudenki/esp32-usb-host-midi-library](https://github.com/enudenki/esp32-usb-host-midi-library) (Omocha, MIT). This repo is a **single-purpose bridge** with its own `Transport` architecture, not a drop-in copy of those libraries.
+
+Design notes: [docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md](docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md).
 
 ## Development
 
 GitHub Actions compile both supported sketches on every push and publish an S3
-firmware artifact. See [BUILD.md](BUILD.md) for FQBNs, pins, and recovery.
+firmware artifact. See [BUILD.md](BUILD.md) for FQBNs, helper scripts, pins, and recovery.
+
+| Task | Command |
+|------|---------|
+| Flash | `./scripts/flash-bridge-s3.sh` |
+| Verify boot | `./scripts/verify-boot.sh` |
+| Serial logs | `python3 read_serial.py --reset` |
+| Wi-Fi logs | `python3 scripts/wifi_log.py` (needs `ENABLE_WIFI_DEBUG=1`) |
+| Unit tests | `./scripts/test.sh` |
 
 ## Credits
 
-ESP32 USB MIDI host work by [sauloverissimo](https://github.com/sauloverissimo/ESP32_Host_MIDI);
+ESP32 USB MIDI host work by [sauloverissimo](https://github.com/sauloverissimo/ESP32_Host_MIDI) and [enudenki](https://github.com/enudenki/esp32-usb-host-midi-library) (Omocha);
 bridge and display work by Liam Jones.
 
 ## License

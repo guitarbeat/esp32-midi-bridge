@@ -15,6 +15,12 @@ if [[ -z "$PORT" ]]; then
   exit 1
 fi
 
+if PIDS="$(lsof -t "$PORT" 2>/dev/null)"; then
+  echo "Port $PORT is busy (PID(s): $PIDS)." >&2
+  echo "Close read_serial.py, Serial Monitor, and any other serial client, then retry." >&2
+  exit 1
+fi
+
 ESPTOOL="$(find "$HOME/Library/Arduino15/packages/esp32/tools/esptool_py" -name esptool -type f 2>/dev/null | sort -V | tail -1)"
 if [[ -z "$ESPTOOL" ]]; then
   echo "esptool not found. Install esp32:esp32 core via arduino-cli." >&2
@@ -32,8 +38,9 @@ echo "Waiting for USB reconnect..."
 sleep 4
 PORT="$(arduino-cli board list | awk '/usbmodem/ {print $1; exit}')"
 if [[ -n "$PORT" ]]; then
-  echo "Watchdog reset on $PORT..."
-  "$ESPTOOL" --chip esp32s3 --port "$PORT" --before no-reset --after watchdog-reset chip-id >/dev/null 2>&1 || true
+  echo "Starting flashed app (watchdog reset) on $PORT..."
+  # Use `run`, not chip-id — chip-id uploads the stub and often re-enters download mode.
+  "$ESPTOOL" --chip esp32s3 --port "$PORT" --before no-reset --after watchdog-reset run >/dev/null 2>&1 || true
 fi
 
 echo ""
