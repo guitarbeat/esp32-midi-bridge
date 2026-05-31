@@ -77,13 +77,17 @@ void setup()
     midiBridge.setMidiEngine(&bridgeSystem.engine());
     midiBridge.addTransport(&usbMidi);
     midiBridge.addTransport(&bleMidi);
-    midiBridge.addTransport(&uartMidi);
+    if (bridgeSystem.settings().uartEnabled()) {
+        midiBridge.addTransport(&uartMidi);
+    }
     midiBridge.addTransport(&connectivityManager);
 
     // 6. Start Transports
     usbMidi.begin();
     bleMidi.begin(bridgeSystem.settings().bleDeviceName());
-    uartMidi.begin();
+    if (bridgeSystem.settings().uartEnabled()) {
+        uartMidi.begin(bridgeSystem.settings().uartBaudRate());
+    }
     connectivityManager.begin();
     bongoCat.begin();
 

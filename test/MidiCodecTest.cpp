@@ -28,10 +28,12 @@ void testParser() {
     static uint8_t lastStatus = 0;
     static uint8_t lastData[3] = {0};
     static size_t lastLen = 0;
+    static size_t lastSysexPos = 0;
 
-    auto callback = [](uint8_t status, const uint8_t* data, size_t length, void* arg) {
+    auto callback = [](uint8_t status, const uint8_t* data, size_t length, size_t sysexPos, void* arg) {
         lastStatus = status;
         lastLen = length;
+        lastSysexPos = sysexPos;
         if (length > 0 && data) std::memcpy(lastData, data, length);
     };
 
@@ -65,18 +67,24 @@ void testParser() {
     assert(lastData[0] == 62);
     assert(lastData[1] == 102);
 
-    // 4. SysEx
+    // 4. SysEx with Position Tracking
     lastStatus = 0;
-    parser.parse(0xF0);
+    parser.parse(0xF0); // Start
     assert(lastStatus == 0xF0);
-    assert(lastLen == 0);
-    parser.parse(0x01);
+    assert(lastSysexPos == 0);
+    
+    parser.parse(0x01); // Data 1
     assert(lastStatus == 0xF0);
     assert(lastLen == 1);
     assert(lastData[0] == 0x01);
-    parser.parse(0xF7);
+    assert(lastSysexPos == 0); // Pos 0 for first data
+    
+    parser.parse(0x02); // Data 2
+    assert(lastSysexPos == 1);
+    
+    parser.parse(0xF7); // End
     assert(lastStatus == 0xF7);
-    assert(lastLen == 0);
+    assert(lastSysexPos == 2); // F7 is at pos 2
 
     std::cout << "testParser passed!" << std::endl;
 }

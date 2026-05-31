@@ -12,6 +12,8 @@ constexpr char kKeyDimMs[] = "dim_ms";
 constexpr char kKeyTranspose[] = "transpose";
 constexpr char kKeyChannel[] = "channel";
 constexpr char kKeyDisplay[] = "display";
+constexpr char kKeyUartEnable[] = "uart_en";
+constexpr char kKeyUartBaud[] = "uart_baud";
 constexpr uint32_t kSchemaVersion = 1;
 constexpr char kKeySchema[] = "schema";
 
@@ -49,6 +51,8 @@ void BridgeSettings::load()
     transpose_ = static_cast<int8_t>(prefs.getChar(kKeyTranspose, transpose_));
     midiChannel_ = prefs.getUChar(kKeyChannel, midiChannel_);
     displayMode_ = prefs.getUChar(kKeyDisplay, displayMode_);
+    uartEnabled_ = prefs.getBool(kKeyUartEnable, uartEnabled_);
+    uartBaudRate_ = prefs.getUInt(kKeyUartBaud, uartBaudRate_);
 
     if (transpose_ < kTransposeMin || transpose_ > kTransposeMax) {
         transpose_ = 0;
@@ -76,6 +80,8 @@ void BridgeSettings::saveAll()
     prefs.putChar(kKeyTranspose, transpose_);
     prefs.putUChar(kKeyChannel, midiChannel_);
     prefs.putUChar(kKeyDisplay, displayMode_);
+    prefs.putBool(kKeyUartEnable, uartEnabled_);
+    prefs.putUInt(kKeyUartBaud, uartBaudRate_);
     prefs.end();
 }
 
@@ -150,6 +156,24 @@ void BridgeSettings::cycleBacklightDim()
     }
 }
 
+void BridgeSettings::toggleUart()
+{
+    uartEnabled_ = !uartEnabled_;
+    saveAll();
+    Serial.printf("[SETTINGS] UART MIDI %s (reboot to apply)\n", uartEnabled_ ? "Enabled" : "Disabled");
+}
+
+void BridgeSettings::cycleUartBaudRate()
+{
+    if (uartBaudRate_ == 31250) {
+        uartBaudRate_ = 115200;
+    } else {
+        uartBaudRate_ = 31250;
+    }
+    saveAll();
+    Serial.printf("[SETTINGS] UART Baud Rate: %u (reboot to apply)\n", uartBaudRate_);
+}
+
 void BridgeSettings::printSummary() const
 {
     Serial.println("[SETTINGS] ---");
@@ -166,5 +190,6 @@ void BridgeSettings::printSummary() const
         Serial.printf("  Backlight dim: %lus idle\n", backlightDimMs_ / 1000);
     }
     Serial.printf("  Display mode index: %u\n", displayMode_);
+    Serial.printf("  UART MIDI: %s at %u baud\n", uartEnabled_ ? "ON" : "OFF", uartBaudRate_);
     Serial.println("[SETTINGS] Buttons: UP/DOWN=transpose, MENU=ch, MENU hold=dim/wifi, OK=mode, OK hold=panic/pause");
 }

@@ -5,9 +5,9 @@ UartConnection::UartConnection(HardwareSerial& serial, int rxPin, int txPin)
 {
 }
 
-bool UartConnection::begin() {
-    // 31250 is the standard MIDI baud rate
-    serial_.begin(31250, SERIAL_8N1, rxPin_, txPin_);
+bool UartConnection::begin(uint32_t baud) {
+    serial_.begin(baud, SERIAL_8N1, rxPin_, txPin_);
+    serial_.setTimeout(0); // Non-blocking readBytes
     initialized_ = true;
     return true;
 }
@@ -21,21 +21,21 @@ bool UartConnection::sendMidi(const uint8_t* packet, size_t length) {
 void UartConnection::task() {
     if (!initialized_) return;
     
-    // Read available bytes and feed the parser
-    // Deep Module: The parser handles all state (running status, sysex)
-    int count = 0;
-    while (serial_.available() && count < 64) { // Limit burst to prevent blocking
-        parser_.parse(serial_.read());
-        count++;
+    uint8_t buffer[64];
+    int available = serial_.available();
+    if (available > 0) {
+        if (available > (int)sizeof(buffer)) available = sizeof(buffer);
+        int read = serial_.readBytes(buffer, available);
+        parser_.parse(buffer, read);
     }
 }
 
-void UartConnection::onMidiReceived(uint8_t status, const uint8_t* data, size_t length, void* arg) {
+void UartConnection::onMidiReceived(uint8_t status, const uint8_t* data, size_t length, size_t sysexPos, void* arg) {
     UartConnection* self = static_cast<UartConnection*>(arg);
     if (!self || !self->receiveCallback_) return;
 
-    // Pack into a temporary buffer to present a complete message to the bridge
-    uint8_t packet[256]; // Sufficient for standard messages and SysEx fragments
+    // Pack into a temporary buffer to present a complete message chunk to the bridge
+    uint8_t packet[256]; 
     if (length + 1 > sizeof(packet)) return;
 
     packet[0] = status;

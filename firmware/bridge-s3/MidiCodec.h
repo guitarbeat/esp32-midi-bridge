@@ -45,23 +45,30 @@ inline uint8_t lengthFromUsbCin(uint8_t cin, uint8_t status)
 }
 
 /**
- * @brief A stateful parser for MIDI byte streams (UART, Serial).
+ * @brief A stateful parser for MIDI byte streams (UART, Serial, BLE).
  * Deep Module Principle: Encapsulates the complexity of Running Status and SysEx.
  */
 class Parser {
 public:
-    /** @brief Callback signature for decoded MIDI messages. */
-    typedef void (*Callback)(uint8_t status, const uint8_t* data, size_t length, void* arg);
+    /** 
+     * @brief Callback signature for decoded MIDI messages. 
+     * @param status The MIDI status byte.
+     * @param data Pointer to the data bytes (nullptr if none).
+     * @param length Number of data bytes.
+     * @param sysexPos For SysEx, the offset of this chunk from the start. 0 on start.
+     * @param arg User argument.
+     */
+    typedef void (*Callback)(uint8_t status, const uint8_t* data, size_t length, size_t sysexPos, void* arg);
 
     Parser(Callback cb = nullptr, void* arg = nullptr) 
-        : cb_(cb), arg_(arg), runningStatus_(0), expectedData_(0), waitData_(0), bufferPos_(0), inSysEx_(false) {}
+        : cb_(cb), arg_(arg), runningStatus_(0), expectedData_(0), waitData_(0), bufferPos_(0), inSysEx_(false), sysexPos_(0) {}
 
     /** @brief Process a single byte from the stream. */
     void parse(uint8_t byte) {
         if (byte >= 0xF8) {
             // Real-time messages (Timing Clock, Active Sensing, etc.)
             // These do NOT affect running status.
-            if (cb_) cb_(byte, nullptr, 0, arg_);
+            if (cb_) cb_(byte, nullptr, 0, 0, arg_);
             return;
         }
 
@@ -71,10 +78,11 @@ public:
 
             if (byte == 0xF0) { // SysEx Start
                 inSysEx_ = true;
-                if (cb_) cb_(byte, nullptr, 0, arg_);
+                sysexPos_ = 0;
+                if (cb_) cb_(byte, nullptr, 0, 0, arg_);
             } else if (byte == 0xF7) { // SysEx End
                 inSysEx_ = false;
-                if (cb_) cb_(byte, nullptr, 0, arg_);
+                if (cb_) cb_(byte, nullptr, 0, sysexPos_, arg_);
                 runningStatus_ = 0; // System Common cancels running status
             } else {
                 inSysEx_ = false;
@@ -83,7 +91,7 @@ public:
                     expectedData_ = len - 1;
                     waitData_ = expectedData_;
                     if (expectedData_ == 0 && cb_) {
-                        cb_(byte, nullptr, 0, arg_);
+                        cb_(byte, nullptr, 0, 0, arg_);
                     }
                 } else {
                     runningStatus_ = 0; // Invalid/Unknown status
@@ -92,7 +100,8 @@ public:
         } else { // Data byte
             if (inSysEx_) {
                 // Forward SysEx data byte immediately
-                if (cb_) cb_(0xF0, &byte, 1, arg_);
+                if (cb_) cb_(0xF0, &byte, 1, sysexPos_, arg_);
+                sysexPos_++;
             } else if (runningStatus_) {
                 if (waitData_ > 0) {
                     buffer_[bufferPos_++] = byte;
@@ -100,12 +109,20 @@ public:
                 }
 
                 if (waitData_ == 0) {
-                    if (cb_) cb_(runningStatus_, buffer_, expectedData_, arg_);
+                    if (cb_) cb_(runningStatus_, buffer_, expectedData_, 0, arg_);
                     // Handle Running Status: reset for next data group
                     waitData_ = expectedData_;
                     bufferPos_ = 0;
                 }
             }
+        }
+    }
+
+    /** @brief Process a buffer of bytes from the stream. */
+    void parse(const uint8_t* data, size_t length) {
+        if (data == nullptr) return;
+        for (size_t i = 0; i < length; i++) {
+            parse(data[i]);
         }
     }
 
@@ -115,9 +132,10 @@ private:
     uint8_t runningStatus_;
     uint8_t expectedData_;
     uint8_t waitData_;
-    uint8_t buffer_[2]; // Max 2 data bytes for standard messages
+    uint8_t buffer_[2];
     size_t bufferPos_;
     bool inSysEx_;
+    size_t sysexPos_;
 };
 
 inline void appendBleTimestamp(uint8_t* packet, size_t* length, uint16_t timestampMs)
