@@ -307,10 +307,6 @@ void USBConnection::_onReceive(usb_transfer_t *transfer) {
             const uint8_t cin = transfer->data_buffer[offset] & 0x0F;
             const uint8_t status = transfer->data_buffer[offset + 1];
             
-            // Filter out Active Sensing (0xFE) to save BLE bandwidth.
-            // Roland pianos send this every 300ms.
-            if (status == 0xFE) continue;
-            
             // CIN 0x0 is "Reserved" or "Invalid" in most MIDI 1.0 cases
             if (cin == 0x00 && status == 0x00) continue;
 

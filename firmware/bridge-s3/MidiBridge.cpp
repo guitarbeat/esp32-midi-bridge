@@ -35,22 +35,30 @@ MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, siz
 {
     if (data == nullptr || length < 1) return Result::kIgnored;
 
-    // Standardize to 3-byte Raw MIDI for processing
-    // (If source is USB, 'data' is already raw MIDI because we extract it in USBConnection)
-    uint8_t rawMidi[3] = {0, 0, 0};
-    memcpy(rawMidi, data, length > 3 ? 3 : length);
+    const uint8_t status = data[0];
 
-    // 1. Live Processing (MidiEngine)
-    if (engine_ != nullptr) {
-        // processPacket works on the actual buffer to allow in-place transformation (like transpose)
+    // Central Filter: Save bandwidth for BLE and UI by dropping noisy messages
+    // Active Sensing (0xFE) is sent every 300ms by many keyboards
+    if (status == 0xFE) return Result::kFiltered;
+    // Timing Clock (0xF8) is sent 24 times per quarter note (can be 50-100Hz+)
+    // Only forward if we specifically need sync (currently we don't)
+    if (status == 0xF8) return Result::kFiltered;
+
+    // Use a stack buffer for processing to allow transformation
+    uint8_t rawMidi[256];
+    const size_t processLen = length > sizeof(rawMidi) ? sizeof(rawMidi) : length;
+    memcpy(rawMidi, data, processLen);
+
+    // 1. Live Processing (MidiEngine) - only for channel voice messages
+    if (engine_ != nullptr && (status >= 0x80 && status < 0xF0)) {
         if (!engine_->processPacket(rawMidi, 3)) {
             return Result::kFiltered;
         }
     }
 
-    // 2. UI Notification (Observing the transformed state)
+    // 2. UI Notification (Visual feedback)
     if (ui_ != nullptr) {
-        // UI uses 4-byte USB-style for its internal log, we convert back for the shim
+        // UI expects a 4-byte shim for standard messages
         uint8_t uiPacket[4] = {0, rawMidi[0], rawMidi[1], rawMidi[2]};
         ui_->notifyMidiEvent(uiPacket);
     }
@@ -62,7 +70,12 @@ MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, siz
     // 3. Hardware Routing
     for (auto* t : transports_) {
         if (t != source && t->isConnected()) {
-            t->sendMidi(rawMidi, 3);
+            t->sendMidi(rawMidi, processLen);
+            
+            // Statistics
+            if (strcmp(t->name(), "BLE-MIDI") == 0) {
+                counters_.blePacketsSent++;
+            }
         }
     }
 

@@ -154,21 +154,14 @@ bool BLEConnection::sendMidi(const uint8_t* data, size_t length) {
 
     bool sent = false;
     if (isConnected()) {
-        // BLE MIDI requirement: [TimestampHigh, TimestampLow, ...MIDI...]
-        uint8_t blePacket[20]; // Max for standard message
-        uint16_t timestamp = millis() & 0x1FFF;
+        uint8_t blePacket[256];
+        size_t outLen = 0;
         
-        blePacket[0] = 0x80 | ((timestamp >> 7) & 0x3F);
-        blePacket[1] = 0x80 | (timestamp & 0x7F);
-        
-        size_t outLen = 2;
-        for (size_t i = 0; i < length && outLen < sizeof(blePacket); i++) {
-            blePacket[outLen++] = data[i];
+        if (MidiCodec::buildBlePacket(data, length, millis(), blePacket, &outLen)) {
+            pCharacteristic->setValue(blePacket, outLen);
+            pCharacteristic->notify();
+            sent = true;
         }
-
-        pCharacteristic->setValue(blePacket, outLen);
-        pCharacteristic->notify();
-        sent = true;
     }
 
     xSemaphoreGive(sendMutex);

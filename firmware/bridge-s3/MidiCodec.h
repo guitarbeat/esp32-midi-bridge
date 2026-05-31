@@ -146,11 +146,31 @@ inline void appendBleTimestamp(uint8_t* packet, size_t* length, uint16_t timesta
     *length = 2;
 }
 
-inline bool buildBlePacket(const uint8_t* usbMidiPacket,
-                           size_t usbLength,
+inline bool buildBlePacket(const uint8_t* rawMidi,
+                           size_t length,
                            uint16_t timestampMs,
                            uint8_t* blePacket,
                            size_t* bleLength)
+{
+    if (rawMidi == nullptr || blePacket == nullptr || bleLength == nullptr || length == 0) {
+        return false;
+    }
+
+    appendBleTimestamp(blePacket, bleLength, timestampMs);
+
+    for (size_t i = 0; i < length && (*bleLength + i) < 256; i++) {
+        blePacket[2 + i] = rawMidi[i];
+    }
+
+    *bleLength = 2 + length;
+    return true;
+}
+
+inline bool buildBlePacketFromUsb(const uint8_t* usbMidiPacket,
+                                  size_t usbLength,
+                                  uint16_t timestampMs,
+                                  uint8_t* blePacket,
+                                  size_t* bleLength)
 {
     if (usbLength < 4 || usbMidiPacket == nullptr || blePacket == nullptr || bleLength == nullptr) {
         return false;
