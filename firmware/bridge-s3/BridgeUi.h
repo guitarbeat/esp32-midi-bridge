@@ -80,6 +80,7 @@ private:
     void drawToast(uint32_t nowMs);
     void setBacklight(uint8_t level);
     bool isButtonPressed(int pin);
+    void sendAllNotesOff();
 
     Arduino_GFX* gfx = nullptr;
     BLEConnection* ble = nullptr;
@@ -88,7 +89,6 @@ private:
     MidiEngine* engine_ = nullptr;
     Board* board_ = nullptr;
     BongoCatDisplay* bongoCat_ = nullptr;
-    int16_t backlightPin = -1;
 
     uint32_t lastMidiMs_ = 0;
     char lastMidiText_[36] = "none";
@@ -115,31 +115,10 @@ private:
     char toastText_[40] = {0};
     uint32_t toastUntilMs_ = 0;
 
-    struct BoardButton {
-        int8_t pin = -1;
-        bool down = false;
-        uint32_t downMs = 0;
-        bool actionFired = false;
-    };
-
-    BoardButton okButton_;
-    BoardButton upButton_;
-    BoardButton downButton_;
-    BoardButton menuButton_;
-
-    void cycleDisplayMode();
-    void toggleBridgePaused();
-    void sendAllNotesOff();
-    void showToast(const char* text, uint32_t nowMs);
-    void updateNotesPerMinute(uint32_t nowMs);
-    void refreshLastNoteLabel();
-    void setBacklight(uint8_t level);
-    void handleBoardButtons(uint32_t nowMs);
-    void initBoardButtons();
-    void drawToast(uint32_t nowMs);
-    void drawMiniKeyboard();
-    void drawVelocityBar();
-    void drawStatusChips(uint32_t nowMs);
+    Button okButton_;
+    Button upButton_;
+    Button downButton_;
+    Button menuButton_;
 };
 
 extern BridgeUi bridgeUi;

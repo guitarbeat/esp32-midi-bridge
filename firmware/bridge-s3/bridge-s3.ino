@@ -38,15 +38,15 @@ void setup()
     
     // 3. UI and Engine Setup
     if (canvas->begin()) {
-        bridgeUi.begin(canvas, -1 /* Managed by Board */);
+        bridgeUi.begin(canvas, -1);
+        bridgeUi.setBoard(board);
         bridgeUi.setMidiEngine(&midiEngine);
         bridgeUi.setBongoCat(&bongoCat);
-        // In Candidate 1, we still need to link board to UI
-        // bridgeUi.setBoard(board);
     }
     
     // 4. MIDI Hub Coordination
     midiBridge.begin(&bridgeSettings, &bridgeUi);
+    midiBridge.setMidiEngine(&midiEngine);
     midiBridge.addTransport(&usbMidi);
     midiBridge.addTransport(&bleMidi);
     midiBridge.addTransport(&connectivityManager);

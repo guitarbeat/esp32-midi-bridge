@@ -3,6 +3,7 @@
 #include "BridgeSettings.h"
 #include "BridgeUi.h"
 #include "MidiCodec.h"
+#include "MidiEngine.h"
 
 #if ENABLE_RTP_MIDI
 #include "NetworkServices.h"
@@ -14,6 +15,11 @@ void MidiBridge::begin(BridgeSettings* settings, BridgeUi* ui)
 {
     settings_ = settings;
     ui_ = ui;
+}
+
+void MidiBridge::setMidiEngine(MidiEngine* engine)
+{
+    engine_ = engine;
 }
 
 void MidiBridge::addTransport(Transport* transport)
@@ -30,17 +36,18 @@ MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, siz
     if (data == nullptr || length < 3) return Result::kIgnored;
 
     // Use a work buffer to allow transformation
-    uint8_t outMidiPacket[4] = {0, data[0], data[1], data[2]};
+    uint8_t workPacket[4] = {0, data[0], data[1], data[2]};
 
-    // Apply filters/transformations if needed (this will move to MidiEngine later)
-    if (settings_ != nullptr) {
-        // Simple shim for now
-        // outMidiPacket[1] is status, outMidiPacket[2] is data1, outMidiPacket[3] is data2
-        // Wait, the existing code uses 4-byte packets.
+    // Feed the MIDI Engine directly (Inverted Data Flow)
+    if (engine_ != nullptr) {
+        if (!engine_->processPacket(workPacket, 4)) {
+            return Result::kFiltered;
+        }
     }
 
+    // Notify UI for logging/display
     if (ui_ != nullptr) {
-        ui_->notifyMidiEvent(outMidiPacket);
+        ui_->notifyMidiEvent(workPacket);
     }
 
     if (ui_ != nullptr && ui_->isBridgePaused()) {
@@ -49,7 +56,7 @@ MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, siz
 
     for (auto* t : transports_) {
         if (t != source && t->isConnected()) {
-            t->sendMidi(data, length);
+            t->sendMidi(workPacket + 1, length);
         }
     }
 
@@ -66,7 +73,6 @@ void MidiBridge::onMidiReceived(Transport* source, const uint8_t* data, size_t l
 
 MidiBridge::Result MidiBridge::forward(const uint8_t* data, size_t length, uint8_t outMidiPacket[4])
 {
-    // Legacy shim for transition
     (void)outMidiPacket;
     onMidiReceived(nullptr, data, length);
     return Result::kForwarded;

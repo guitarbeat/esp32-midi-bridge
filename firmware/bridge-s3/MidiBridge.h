@@ -9,6 +9,7 @@
 
 class BridgeSettings;
 class BridgeUi;
+class MidiEngine;
 
 class MidiBridge {
 public:
@@ -28,6 +29,7 @@ public:
     };
 
     void begin(BridgeSettings* settings, BridgeUi* ui);
+    void setMidiEngine(MidiEngine* engine);
     
     /** @brief Adds a transport to the bridge. The bridge will route messages to/from it. */
     void addTransport(Transport* transport);
@@ -43,6 +45,7 @@ public:
 private:
     BridgeSettings* settings_ = nullptr;
     BridgeUi* ui_ = nullptr;
+    MidiEngine* engine_ = nullptr;
     std::vector<Transport*> transports_;
     Counters counters_;
 
