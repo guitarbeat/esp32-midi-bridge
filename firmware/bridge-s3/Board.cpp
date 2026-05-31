@@ -2,7 +2,7 @@
 
 /**
  * @brief Implementation for the ESP32-S3-USB-OTG board.
- * Rigorously matched to the verified configuration from commit 0dda545.
+ * Enhanced Power Logic: Handles potential pin variations for SUB-V1/V2.
  */
 class S3UsbOtgBoard : public Board {
 public:
@@ -20,37 +20,35 @@ public:
             true /* IPS */,
             240 /* width */,
             240 /* height */,
-            0, 0, 0, 0))
+            0, 0, 0, 0)) // Standard zero offset
     {}
 
     bool begin() override {
-        // 1. USB Host Power Pins (Critical for the Hub)
+        // 1. USB Host Power Pins
         pinMode(18 /* SEL */, OUTPUT); digitalWrite(18, HIGH);
         pinMode(12 /* VBUS */, OUTPUT); digitalWrite(12, HIGH);
         pinMode(17 /* LIMIT */, OUTPUT); digitalWrite(17, HIGH);
         pinMode(13 /* BOOST */, OUTPUT); digitalWrite(13, LOW);
 
-        // 2. LCD Enable Pin (GPIO 5 is shared with CS in config but was explicitly set in old code)
-        // Many S3-USB-OTG v2.0 boards need GPIO 5 LOW to enable the display.
-        pinMode(5, OUTPUT);
-        digitalWrite(5, LOW);
+        // 2. Triple-Pin Display Power Enable
+        // Different revisions use different pins for enable/backlight.
+        // We trigger all of them to be safe.
+        pinMode(5, OUTPUT);  digitalWrite(5, LOW);  // Display Enable (Active Low)
+        pinMode(14, OUTPUT); digitalWrite(14, HIGH); // Power Gate / Backlight (Active High)
+        pinMode(9, OUTPUT);  digitalWrite(9, HIGH);  // Backlight PWM (Active High)
+        delay(100);
 
-        // 3. LCD Initialization (Using verified 80MHz SPI from 0dda545)
+        // 3. LCD Initialization
         if (!display->begin(80000000)) { 
             return false;
         }
 
-        // 4. Backlight Setup (GPIO 9)
-        pinMode(9, OUTPUT);
-        setBacklight(255);
-
-        // 5. Buttons (Pull-ups)
+        // 4. Buttons (Pull-ups)
         pinMode(0 /* OK/Boot */, INPUT_PULLUP);
         pinMode(10 /* UP */, INPUT_PULLUP);
         pinMode(11 /* DOWN */, INPUT_PULLUP);
-        pinMode(14 /* MENU */, INPUT_PULLUP);
 
-        // 6. Battery Sensing
+        // 5. Battery Sensing
         analogReadResolution(12);
 
         return true;
@@ -61,6 +59,8 @@ public:
     }
 
     void setBacklight(uint8_t level) override {
+        // Drive both potential backlight pins
+        digitalWrite(14, level > 0 ? HIGH : LOW);
         digitalWrite(9, level > 0 ? HIGH : LOW);
     }
 
@@ -77,7 +77,7 @@ public:
         if (strcmp(name, "OK") == 0) return 0;
         if (strcmp(name, "UP") == 0) return 10;
         if (strcmp(name, "DOWN") == 0) return 11;
-        if (strcmp(name, "MENU") == 0) return 14;
+        if (strcmp(name, "MENU") == 0) return 14; 
         return -1;
     }
 
