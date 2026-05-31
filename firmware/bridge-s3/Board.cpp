@@ -2,7 +2,7 @@
 
 /**
  * @brief Implementation for the ESP32-S3-USB-OTG board.
- * Corrected to the verified SPI configuration from commit 0dda545.
+ * Rigorously matched to the verified configuration from commit 0dda545.
  */
 class S3UsbOtgBoard : public Board {
 public:
@@ -24,28 +24,33 @@ public:
     {}
 
     bool begin() override {
-        // 1. USB Host Power Pins
+        // 1. USB Host Power Pins (Critical for the Hub)
         pinMode(18 /* SEL */, OUTPUT); digitalWrite(18, HIGH);
         pinMode(12 /* VBUS */, OUTPUT); digitalWrite(12, HIGH);
         pinMode(17 /* LIMIT */, OUTPUT); digitalWrite(17, HIGH);
         pinMode(13 /* BOOST */, OUTPUT); digitalWrite(13, LOW);
 
-        // 2. LCD Initialization (SPI)
-        if (!display->begin(40000000)) { 
+        // 2. LCD Enable Pin (GPIO 5 is shared with CS in config but was explicitly set in old code)
+        // Many S3-USB-OTG v2.0 boards need GPIO 5 LOW to enable the display.
+        pinMode(5, OUTPUT);
+        digitalWrite(5, LOW);
+
+        // 3. LCD Initialization (Using verified 80MHz SPI from 0dda545)
+        if (!display->begin(80000000)) { 
             return false;
         }
 
-        // 3. Backlight Setup (GPIO 9)
-        pinMode(9 /* Backlight */, OUTPUT);
+        // 4. Backlight Setup (GPIO 9)
+        pinMode(9, OUTPUT);
         setBacklight(255);
 
-        // 4. Buttons (Pull-ups)
+        // 5. Buttons (Pull-ups)
         pinMode(0 /* OK/Boot */, INPUT_PULLUP);
         pinMode(10 /* UP */, INPUT_PULLUP);
         pinMode(11 /* DOWN */, INPUT_PULLUP);
         pinMode(14 /* MENU */, INPUT_PULLUP);
 
-        // 5. Battery Sensing
+        // 6. Battery Sensing
         analogReadResolution(12);
 
         return true;
@@ -56,7 +61,6 @@ public:
     }
 
     void setBacklight(uint8_t level) override {
-        // Active High control on GPIO 9
         digitalWrite(9, level > 0 ? HIGH : LOW);
     }
 
