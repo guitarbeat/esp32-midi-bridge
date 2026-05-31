@@ -15,19 +15,19 @@ Official Espressif ESP32-S3-USB-OTG board — 8 MB flash, USB CDC on boot:
 ```bash
 arduino-cli compile \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 
 arduino-cli upload \
   -p /dev/cu.usbmodem11101 \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 ```
 
 Replace the port with your board (`arduino-cli board list`).
 
 ### Prebuilt binary
 
-CI builds `./USB-MIDI-BLE-Bridge` and uploads `USB-MIDI-BLE-Bridge.ino.bin` as a
+CI builds `./firmware/bridge-s3` and uploads `bridge-s3.ino.bin` as a
 workflow artifact on each push. Download it from the Actions tab for your branch.
 
 Flash with `esptool.py` or the Arduino IDE “Flash from file” if you use a third-party
@@ -42,7 +42,7 @@ back to the USB device (only if the device exposes a USB MIDI OUT endpoint):
 arduino-cli compile \
   --build-property 'build.extra_flags=-DENABLE_BLE_TO_USB=1' \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 ```
 
 ### Optional: USB debug logging
@@ -51,7 +51,7 @@ arduino-cli compile \
 arduino-cli compile \
   --build-property 'build.extra_flags=-DDEBUG_USB=1' \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 ```
 
 ### On-board controls (ESP32-S3-USB-OTG)
@@ -84,7 +84,7 @@ Backlight dims after the configured idle period; any MIDI activity wakes it.
 arduino-cli compile \
   --build-property 'build.extra_flags=-DBLE_DEVICE_NAME_TEXT=\"My Piano Bridge\"' \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 ```
 
 ### WiFi RTP-MIDI (Apple MIDI)
@@ -120,13 +120,13 @@ When the board is on your WiFi (after RTP setup), you can flash new firmware **w
 arduino-cli upload \
   -p piano-ble-bridge.local \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 
 # Or use the IP shown on the display (RTP x.x.x.x line)
 arduino-cli upload \
   -p 192.168.1.42 \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 ```
 
 4. `arduino-cli board list` may also show a **network port** for the ESP32 when OTA is advertising.
@@ -138,10 +138,20 @@ Disable OTA with `#define ENABLE_OTA 0` in `RTPMidiConfig.h` (RTP/BLE still work
 
 **Note:** The first flash after adding OTA still needs USB once. After that, use OTA for routine updates.
 
+## Unit Tests
+
+Logic tests that don't depend on hardware can be run on the host machine using `g++`:
+
+```bash
+./scripts/test.sh
+```
+
+These tests are located in the `test/` directory and use a mock for Arduino-specific types.
+
 ## Fallback Firmware (Classic ESP32 + MAX3421E)
 
 ```bash
-arduino-cli compile --fqbn esp32:esp32:esp32 ./Classic-ESP32-MAX3421E-MIDI-BLE
+arduino-cli compile --fqbn esp32:esp32:esp32 ./firmware/bridge-classic
 ```
 
 Requires the USB Host Shield library and wired MAX3421E module.

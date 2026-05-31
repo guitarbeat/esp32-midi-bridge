@@ -23,5 +23,5 @@ CLAUDE.md
 docs/
 
 # Local Wi-Fi credentials for optional RTP-MIDI builds
-USB-MIDI-BLE-Bridge/wifi_secrets.h
-USB-MIDI-BLE-Bridge/ota_secrets.h
+firmware/bridge-s3/wifi_secrets.h
+firmware/bridge-s3/ota_secrets.h

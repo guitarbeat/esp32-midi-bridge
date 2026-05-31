@@ -28,22 +28,22 @@ jobs:
       - name: Compile ESP32-S3 USB host bridge
         run: |
           arduino-cli compile \
-            --output-dir build-s3 \
+            --output-dir dist/s3 \
             --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-            ./USB-MIDI-BLE-Bridge
+            ./firmware/bridge-s3
 
       - name: Upload S3 firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: USB-MIDI-BLE-Bridge-esp32s3
+          name: bridge-s3-esp32s3
           path: |
-            build-s3/USB-MIDI-BLE-Bridge.ino.bin
-            build-s3/USB-MIDI-BLE-Bridge.ino.bootloader.bin
-            build-s3/USB-MIDI-BLE-Bridge.ino.partitions.bin
+            dist/s3/bridge-s3.ino.bin
+            dist/s3/bridge-s3.ino.bootloader.bin
+            dist/s3/bridge-s3.ino.partitions.bin
           if-no-files-found: error
 
       - name: Compile classic ESP32 MAX3421E fallback
         run: |
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
-            ./Classic-ESP32-MAX3421E-MIDI-BLE
+            ./firmware/bridge-classic

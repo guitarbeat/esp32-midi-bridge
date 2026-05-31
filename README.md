@@ -71,7 +71,7 @@ so this is tracked as forward-looking, not a current feature.
 
 ### Primary: ESP32-S3 with native USB host
 
-The supported product firmware is **[USB-MIDI-BLE-Bridge](USB-MIDI-BLE-Bridge/)** for an
+The supported product firmware is **[bridge-s3](firmware/bridge-s3/)** for an
 ESP32-S3 board with USB-OTG host. This repo is tested on the official Espressif
 **ESP32-S3-USB-OTG** development board (display + Type-A host + `USB_DEV` power).
 
@@ -84,13 +84,13 @@ Wiring for that board:
 ### Fallback: Classic ESP32 + MAX3421E
 
 Only if you already have a **classic ESP32** (not S3): add a MAX3421E USB host
-shield/module and build **[Classic-ESP32-MAX3421E-MIDI-BLE](Classic-ESP32-MAX3421E-MIDI-BLE/)**.
+shield/module and build **[bridge-classic](firmware/bridge-classic/)**.
 Classic ESP32 boards cannot host USB MIDI from their onboard USB connector alone.
 
 ## Quick Start
 
 1. **Get hardware** — ESP32-S3-USB-OTG (recommended) or classic ESP32 + MAX3421E.
-2. **Flash firmware** — download the latest `USB-MIDI-BLE-Bridge` `.bin` from the
+2. **Flash firmware** — download the latest `bridge-s3` `.bin` from the
    [GitHub Actions](https://github.com/guitarbeat/esp32-cyd-midi-ble-bridge/actions)
    workflow artifacts, or build with Arduino CLI (see [BUILD.md](BUILD.md)).
 3. **Wire the piano** — keyboard → Type-A host; board powered (including `USB_DEV` on the OTG board).
@@ -115,7 +115,7 @@ arduino-cli core install esp32:esp32
 arduino-cli lib install "USB Host Shield Library 2.0" "GFX Library for Arduino"
 arduino-cli compile \
   --fqbn 'esp32:esp32:esp32s3:FlashSize=8M,PartitionScheme=default_8MB,CDCOnBoot=cdc' \
-  ./USB-MIDI-BLE-Bridge
+  ./firmware/bridge-s3
 ```
 
 ## Pairing
