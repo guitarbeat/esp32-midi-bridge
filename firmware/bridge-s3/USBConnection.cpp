@@ -100,6 +100,12 @@ USBConnection::USBConnection()
     midiAlternateSetting_(-1),
     vendorId_(0),
     productId_(0),
+    midiInEndpoint_(0),
+    midiOutEndpoint_(0),
+    claimedInterfaceClass_(0),
+    claimedInterfaceSubClass_(0),
+    lastUsbBytes_{0},
+    lastUsbByteCount_(0),
     vendorByteStreamMode_(false),
     deviceName(""),
     lastError(""),
@@ -207,6 +213,12 @@ void USBConnection::handleDeviceRemoved()
     lastRawStatus_ = 0;
     vendorId_ = 0;
     productId_ = 0;
+    midiInEndpoint_ = 0;
+    midiOutEndpoint_ = 0;
+    claimedInterfaceClass_ = 0;
+    claimedInterfaceSubClass_ = 0;
+    memset(lastUsbBytes_, 0, sizeof(lastUsbBytes_));
+    lastUsbByteCount_ = 0;
     vendorByteStreamMode_ = false;
     vendorStreamParser_ = MidiCodec::Parser(_onVendorStreamMidi, this);
     memset(usbRunningStatus_, 0, sizeof(usbRunningStatus_));
@@ -409,6 +421,11 @@ void USBConnection::_onReceive(usb_transfer_t* transfer)
     if (transfer->status == 0 &&
         ((usbCon->vendorByteStreamMode_ && transfer->actual_num_bytes > 0) ||
          (!usbCon->vendorByteStreamMode_ && transfer->actual_num_bytes >= 4))) {
+        const uint8_t captureLen = min(static_cast<int>(transfer->actual_num_bytes),
+                                       static_cast<int>(sizeof(usbCon->lastUsbBytes_)));
+        memcpy(usbCon->lastUsbBytes_, transfer->data_buffer, captureLen);
+        usbCon->lastUsbByteCount_ = captureLen;
+
         if (usbCon->vendorByteStreamMode_) {
             const size_t length = min(static_cast<size_t>(transfer->actual_num_bytes),
                                       sizeof(usbCon->usbQueue[0].data));
@@ -416,8 +433,12 @@ void USBConnection::_onReceive(usb_transfer_t* transfer)
                 usbCon->rawUsbPacketsSeen_++;
                 if (!usbCon->firstMidiReceived) {
                     usbCon->firstMidiReceived = true;
-                    BRIDGE_LOG("[USB] First Roland vendor USB data received (%u bytes)\n",
+                    BRIDGE_LOG("[USB] First Roland vendor USB data received (%u bytes):",
                                static_cast<unsigned>(length));
+                    for (uint8_t i = 0; i < captureLen; i++) {
+                        BRIDGE_LOG(" %02X", usbCon->lastUsbBytes_[i]);
+                    }
+                    BRIDGE_LOG_LN("");
                 }
             }
         } else {
@@ -431,7 +452,11 @@ void USBConnection::_onReceive(usb_transfer_t* transfer)
                     if (!usbCon->firstMidiReceived) {
                         usbCon->firstMidiReceived = true;
                         const uint8_t status = transfer->data_buffer[offset + 1];
-                        BRIDGE_LOG("[USB] First MIDI data received (status=0x%02X)\n", status);
+                        BRIDGE_LOG("[USB] First MIDI data received (status=0x%02X):", status);
+                        for (uint8_t i = 0; i < captureLen; i++) {
+                            BRIDGE_LOG(" %02X", usbCon->lastUsbBytes_[i]);
+                        }
+                        BRIDGE_LOG_LN("");
                     }
                 }
             }
@@ -673,6 +698,8 @@ bool USBConnection::_claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf
 
     midiInterfaceNumber = static_cast<int8_t>(intf->bInterfaceNumber);
     midiAlternateSetting_ = static_cast<int8_t>(intf->bAlternateSetting);
+    claimedInterfaceClass_ = intf->bInterfaceClass;
+    claimedInterfaceSubClass_ = intf->bInterfaceSubClass;
     vendorByteStreamMode_ = vendorByteStream;
     return true;
 }
@@ -688,6 +715,8 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
     uint16_t index = 0;
     bool claimedOk = false;
     bool vendorModeSeen = false;
+    const usb_intf_desc_t* knownDeviceFallbackInterface = nullptr;
+    uint16_t knownDeviceFallbackIndex = 0;
 
     BRIDGE_LOG("[USB] Scanning %d bytes of descriptors...\n", totalLength);
     if (_isKnownVendorMidiDevice()) {
@@ -713,6 +742,12 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
                        intf->bInterfaceClass, intf->bInterfaceSubClass, intf->bNumEndpoints);
 
             const bool knownVendorMidi = _isKnownVendorMidiInterface(intf);
+            if (_isKnownVendorMidiDevice() &&
+                intf->bNumEndpoints > 0 &&
+                knownDeviceFallbackInterface == nullptr) {
+                knownDeviceFallbackInterface = intf;
+                knownDeviceFallbackIndex = index + len;
+            }
             if (intf->bInterfaceClass == 0xFF && intf->bNumEndpoints > 0) {
                 vendorModeSeen = true;
                 if (knownVendorMidi) {
@@ -742,9 +777,29 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
         index += len;
     }
 
+    if (!claimedOk && knownDeviceFallbackInterface != nullptr) {
+        BRIDGE_LOG("[USB] Roland F-20 broad fallback: interface %d class 0x%02X subclass 0x%02X endpoints %d\n",
+                   knownDeviceFallbackInterface->bInterfaceNumber,
+                   knownDeviceFallbackInterface->bInterfaceClass,
+                   knownDeviceFallbackInterface->bInterfaceSubClass,
+                   knownDeviceFallbackInterface->bNumEndpoints);
+        if (_claimInterfaceAndSetupEndpoints(knownDeviceFallbackInterface,
+                                             p,
+                                             totalLength,
+                                             knownDeviceFallbackIndex,
+                                             true)) {
+            claimedOk = true;
+        }
+    }
+
     if (claimedOk) {
         isReady = true;
-        BRIDGE_LOG_LN("[USB]   MIDI IN/OUT configured. Applying Casio CT-S1 delay...");
+        BRIDGE_LOG("[USB]   MIDI IN/OUT configured (if=0x%02X/0x%02X in=0x%02X out=0x%02X mode=%s). Applying settle delay...\n",
+                   claimedInterfaceClass_,
+                   claimedInterfaceSubClass_,
+                   midiInEndpoint_,
+                   midiOutEndpoint_,
+                   vendorByteStreamMode_ ? "stream" : "usb-midi");
         vTaskDelay(pdMS_TO_TICKS(200));
 
         for (int i = 0; i < kNumMidiInTransfers; i++) {
@@ -798,6 +853,7 @@ void USBConnection::_setupMidiInEndpoint(const usb_ep_desc_t* endpoint)
 
         BRIDGE_LOG("[USB]   MIDI IN allocated on 0x%02X (pipe %d)\n",
                    endpoint->bEndpointAddress, i);
+        midiInEndpoint_ = endpoint->bEndpointAddress;
         return;
     }
 }
@@ -826,6 +882,7 @@ void USBConnection::_setupMidiOutEndpoint(const usb_ep_desc_t* endpoint)
     outTransfer->callback = _onSendComplete;
     outTransfer->context = this;
     outTransfer->num_bytes = wMaxPacketSize;
+    midiOutEndpoint_ = endpoint->bEndpointAddress;
     BRIDGE_LOG("[USB]   MIDI OUT allocated on 0x%02X\n", endpoint->bEndpointAddress);
 }
 
@@ -867,6 +924,7 @@ bool USBConnection::_tryEndpointFallback()
     midiInTransfers[0]->context = this;
     midiInTransfers[0]->num_bytes = 64;
     interval = 1;
+    midiInEndpoint_ = 0x81;
     vendorByteStreamMode_ = _isKnownVendorMidiDevice();
     isReady = true;
 

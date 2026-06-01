@@ -94,3 +94,9 @@ and decodes either standard USB-MIDI event packets or a raw MIDI byte stream.
   arriving.
 - `USB RAW`: USB packets are arriving, but MIDI decoding is dropping them.
 - `USB MIDI`: decoded F-20 MIDI is reaching the bridge.
+
+Current diagnostic builds also show the observed `VID:PID`, claimed interface,
+IN/OUT endpoint addresses, and either raw packet counts or the last four USB
+bytes received. This follows the practical debugging style used by
+[`liamlah/DIY_Casiotone_Bluetooth`](https://github.com/liamlah/DIY_Casiotone_Bluetooth):
+first prove the USB host is seeing packets, then debug BLE/app routing.

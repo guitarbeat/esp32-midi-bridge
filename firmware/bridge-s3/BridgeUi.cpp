@@ -251,27 +251,54 @@ void BridgeUi::drawStatsRow()
     gfx->setTextColor(RGB565_LIGHTGRAY);
     gfx->setCursor(14, 78);
     const uint32_t usbRaw = diagnostics_.usb != nullptr ? diagnostics_.usb->getRawUsbPacketsSeen() : 0;
+    const uint32_t usbDecoded = diagnostics_.usb != nullptr ? diagnostics_.usb->getDecodedMidiPacketsSeen() : 0;
     const uint32_t usbDrops = diagnostics_.usb != nullptr ? diagnostics_.usb->getDecodeDropCount() : 0;
-    if (diagnostics_.usbStats.received == 0 && (usbRaw > 0 || usbDrops > 0)) {
-        gfx->printf("USB RAW %lu  MIDI %lu  DROP %lu",
-                    usbRaw,
-                    diagnostics_.usbStats.received,
-                    usbDrops);
+
+    if (diagnostics_.usb != nullptr &&
+        diagnostics_.usb->hasSeenDevice() &&
+        diagnostics_.usbStats.received == 0) {
+        const uint16_t vid = diagnostics_.usb->getVendorId();
+        const uint16_t pid = diagnostics_.usb->getProductId();
+        const int8_t ifNum = diagnostics_.usb->getMidiInterfaceNumber();
+        gfx->printf("USB %04X:%04X IF %d %02X/%02X",
+                    vid,
+                    pid,
+                    ifNum,
+                    diagnostics_.usb->getClaimedInterfaceClass(),
+                    diagnostics_.usb->getClaimedInterfaceSubClass());
+        gfx->setCursor(14, 90);
+        gfx->setTextColor(usbRaw > 0 ? RGB565_GOLD : kMutedText);
+        if (usbRaw > 0 && diagnostics_.usb->getLastUsbByteCount() > 0) {
+            gfx->printf("B %02X %02X %02X %02X  MIDI %lu D %lu",
+                        diagnostics_.usb->getLastUsbByte(0),
+                        diagnostics_.usb->getLastUsbByte(1),
+                        diagnostics_.usb->getLastUsbByte(2),
+                        diagnostics_.usb->getLastUsbByte(3),
+                        usbDecoded,
+                        usbDrops);
+        } else {
+            gfx->printf("IN %02X OUT %02X RAW %lu MIDI %lu %s",
+                        diagnostics_.usb->getMidiInEndpoint(),
+                        diagnostics_.usb->getMidiOutEndpoint(),
+                        usbRaw,
+                        usbDecoded,
+                        diagnostics_.usb->isVendorByteStreamMode() ? "S" : "P");
+        }
     } else {
         gfx->printf("RX U%lu B%lu R%lu S%lu",
                     diagnostics_.usbStats.received,
                     diagnostics_.bleStats.received,
                     diagnostics_.rtpStats.received,
                     diagnostics_.uartStats.received);
-    }
 
-    gfx->setTextColor(RGB565_GOLD);
-    gfx->setCursor(14, 90);
-    gfx->printf("TX U%lu B%lu R%lu S%lu",
-                diagnostics_.usbStats.sent,
-                diagnostics_.bleStats.sent,
-                diagnostics_.rtpStats.sent,
-                diagnostics_.uartStats.sent);
+        gfx->setTextColor(RGB565_GOLD);
+        gfx->setCursor(14, 90);
+        gfx->printf("TX U%lu B%lu R%lu S%lu",
+                    diagnostics_.usbStats.sent,
+                    diagnostics_.bleStats.sent,
+                    diagnostics_.rtpStats.sent,
+                    diagnostics_.uartStats.sent);
+    }
 
     if (diagnostics_.usb != nullptr && !diagnostics_.usb->isConnected()) {
         const String& err = diagnostics_.usb->getLastError();

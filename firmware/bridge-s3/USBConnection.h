@@ -51,6 +51,14 @@ public:
     uint32_t getDecodedMidiPacketsSeen() const { return decodedMidiPacketsSeen_; }
     uint32_t getDecodeDropCount() const { return decodeDropCount_; }
     uint8_t getLastRawStatus() const { return lastRawStatus_; }
+    uint8_t getMidiInEndpoint() const { return midiInEndpoint_; }
+    uint8_t getMidiOutEndpoint() const { return midiOutEndpoint_; }
+    uint8_t getClaimedInterfaceClass() const { return claimedInterfaceClass_; }
+    uint8_t getClaimedInterfaceSubClass() const { return claimedInterfaceSubClass_; }
+    int8_t getMidiInterfaceNumber() const { return midiInterfaceNumber; }
+    bool isVendorByteStreamMode() const { return vendorByteStreamMode_; }
+    uint8_t getLastUsbByte(uint8_t index) const { return index < sizeof(lastUsbBytes_) ? lastUsbBytes_[index] : 0; }
+    uint8_t getLastUsbByteCount() const { return lastUsbByteCount_; }
 
     virtual void onMidiDataReceived(const uint8_t* data, size_t length);
     virtual void onDeviceConnected();
@@ -91,6 +99,12 @@ protected:
     int8_t midiAlternateSetting_;
     uint16_t vendorId_;
     uint16_t productId_;
+    uint8_t midiInEndpoint_;
+    uint8_t midiOutEndpoint_;
+    uint8_t claimedInterfaceClass_;
+    uint8_t claimedInterfaceSubClass_;
+    uint8_t lastUsbBytes_[8];
+    volatile uint8_t lastUsbByteCount_;
     bool vendorByteStreamMode_;
     String deviceName;
     String lastError;
