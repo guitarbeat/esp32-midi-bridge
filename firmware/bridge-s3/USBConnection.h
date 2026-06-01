@@ -11,6 +11,7 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
+#include "MidiCodec.h"
 #include "Transport.h"
 
 class Board;
@@ -43,6 +44,8 @@ public:
     const String& getLastError() const { return lastError; }
     TaskHandle_t getTaskHandle() const { return usbTaskHandle; }
     const String& getDeviceName() const { return deviceName; }
+    uint16_t getVendorId() const { return vendorId_; }
+    uint16_t getProductId() const { return productId_; }
     bool hasSeenDevice() const { return deviceSeen_; }
     uint32_t getRawUsbPacketsSeen() const { return rawUsbPacketsSeen_; }
     uint32_t getDecodedMidiPacketsSeen() const { return decodedMidiPacketsSeen_; }
@@ -83,8 +86,12 @@ protected:
     volatile uint32_t decodeDropCount_;
     volatile uint8_t lastRawStatus_;
     uint8_t usbRunningStatus_[16];
+    MidiCodec::Parser vendorStreamParser_;
     int8_t midiInterfaceNumber;
     int8_t midiAlternateSetting_;
+    uint16_t vendorId_;
+    uint16_t productId_;
+    bool vendorByteStreamMode_;
     String deviceName;
     String lastError;
     Board* board_;
@@ -100,15 +107,18 @@ protected:
     static void _clientEventCallback(const usb_host_client_event_msg_t* eventMsg, void* arg);
     static void _onReceive(usb_transfer_t* transfer);
     static void _onSendComplete(usb_transfer_t* transfer);
+    static void _onVendorStreamMidi(uint8_t status, const uint8_t* data, size_t length, size_t sysexPos, void* arg);
 
     void _parseConfig(const usb_config_desc_t* config_desc);
     bool _isMidiInterface(const usb_intf_desc_t* intf) const;
-    bool _claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf, const uint8_t* config, uint16_t totalLength, uint16_t indexAfterIntf);
-    void _setupMidiEndpoint(const usb_ep_desc_t* endpoint);
+    bool _isKnownVendorMidiDevice() const;
+    bool _isKnownVendorMidiInterface(const usb_intf_desc_t* intf) const;
+    bool _claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf, const uint8_t* config, uint16_t totalLength, uint16_t indexAfterIntf, bool vendorByteStream);
+    void _setupMidiEndpoint(const usb_ep_desc_t* endpoint, bool allowInterrupt);
     void _setupMidiInEndpoint(const usb_ep_desc_t* endpoint);
     void _setupMidiOutEndpoint(const usb_ep_desc_t* endpoint);
     bool _tryEndpointFallback();
-    void loadDeviceName();
+    void loadDeviceInfo();
     void handleDeviceRemoved();
 };
 

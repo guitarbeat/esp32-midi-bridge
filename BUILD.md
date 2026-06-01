@@ -111,9 +111,10 @@ bridge parser already handles those short messages.
 
 If the display reports `No USB MIDI interface`, `USB WAIT`, or `USB NOMID`, debug
 USB enumeration first. Connect the Roland **USB COMPUTER** port directly to a Mac
-and verify it appears in **Audio MIDI Setup -> MIDI Studio**. If it appears on
-the Mac but not on the ESP32, capture the F-20 USB descriptors and adapt
-`USBConnection` endpoint matching. See
+and verify it appears in **Audio MIDI Setup -> MIDI Studio**. An F-20 observed as
+**Roland Digital Piano** on macOS reports `VID:PID 0582:0122`; the S3 firmware
+accepts that Roland vendor interface and falls back to byte-stream MIDI decoding
+if standard USB-MIDI event packets are not present. See
 [`docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md`](docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).
 
 ### Prebuilt binary

@@ -54,7 +54,22 @@ The PDF does not include:
 
 If the display says `USB WAIT` or `No USB MIDI interface`, the failure is below
 the MIDI-message layer. Focus on USB host power, cable, Roland port, class
-compliance, and descriptor capture.
+compliance, and endpoint matching.
+
+## Observed USB identity
+
+When connected directly to a MacBook Air, the F-20 appears as **Roland Digital
+Piano** and is claimed by macOS `MIDIServer`.
+
+- Vendor ID: `0x0582` (Roland)
+- Product ID: `0x0122`
+- USB speed: full-speed USB 1.1
+- Device class: `0x00` at the device level
+
+macOS does not expose child interface details while `MIDIServer` owns the
+device, so the bridge firmware treats this exact `VID:PID` as a known Roland
+vendor MIDI device. It claims the vendor interface, configures IN/OUT endpoints,
+and decodes either standard USB-MIDI event packets or a raw MIDI byte stream.
 
 ## Debug order
 
@@ -66,8 +81,9 @@ compliance, and descriptor capture.
 4. Open **Audio MIDI Setup -> MIDI Studio** and confirm the F-20 appears.
 5. If it does not appear on the Mac, fix the Roland port/cable/F-20 setup before
    changing firmware.
-6. If it appears on the Mac but the ESP32 shows `No USB MIDI interface`, capture
-   the F-20 USB descriptors and adapt `USBConnection` endpoint matching.
+6. If it appears on the Mac but the ESP32 shows `No USB MIDI interface`, flash a
+   build with the Roland vendor fallback and watch for `VID:PID 0582:0122` plus
+   `Roland vendor-class MIDI candidate found` in USB logs.
 7. If the ESP32 display shows `USB MIDI`, press keys and pedals and verify Note
    On/Off plus CC64 increment bridge counters.
 

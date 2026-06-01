@@ -157,7 +157,8 @@ If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized
 
 ### The Piano Does Not Connect Over USB
 
-- Confirm the instrument is **class-compliant USB MIDI**.
+- Confirm the instrument is **class-compliant USB MIDI**, or one of the known
+  vendor MIDI devices supported by this firmware.
 - Confirm **5 V VBUS** on the host port. On ESP32-S3-USB-OTG, Micro-USB debug power alone
   can boot BLE while the Type-A port has no power for the keyboard — use **USB HOST**
   for the piano and **USB_DEV** for 5 V.
@@ -166,6 +167,9 @@ If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized
 - On the F-20, the owner manual describes **USB COMPUTER** as the port for MIDI
   transfer with sequencer software. **USB MEMORY** is for flash drives/wireless
   adapter use.
+- The Roland F-20 has been observed on macOS as **Roland Digital Piano**
+  (`VID:PID 0582:0122`) and the S3 firmware includes a vendor-interface fallback
+  for that identity.
 - Try another data-capable USB cable.
 - Check the on-screen hint: `Use HOST + power USB_DEV`.
 - For Roland F-20 specifics, see [Roland F-20 USB MIDI diagnostics](docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).
