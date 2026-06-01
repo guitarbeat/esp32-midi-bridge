@@ -33,11 +33,10 @@ MIDI adapter). This project is an open, hackable replacement for that device:
 - A visible startup/status screen on the Espressif ESP32-S3-USB-OTG board.
 - **Bongo Cat** sprite animation (from [vostoklabs/bongo_cat_monitor](https://github.com/vostoklabs/bongo_cat_monitor)) driven by your playing.
 - On-screen **mini keyboard**, **velocity bar**, **sustain** indicator, and **notes/min** counter.
-- **Board buttons** (ESP32-S3-USB-OTG): UP/DOWN transpose, MENU cycles channel filter, MENU hold cycles backlight dim, OK cycles display mode, OK hold panic/pause.
+- **Board buttons** (ESP32-S3-USB-OTG): UP/DOWN transpose, MENU cycles channel filter, MENU hold cycles backlight dim, OK confirms the unified view, OK hold panic/pause.
 - **Backlight dim** after 90 s idle (configurable via MENU hold); wakes on MIDI activity.
-- **NVS settings**: transpose, MIDI channel filter, display mode, backlight timeout (saved across reboots).
-- **Link health** on Full display: USB→BLE forwarding latency (when connected).
-- **Stage display mode**: cat-focused view with status hidden.
+- **NVS settings**: transpose, MIDI channel filter, and backlight timeout (saved across reboots).
+- **Unified display**: USB/BLE/RTP status, USB diagnostics, last note, velocity, and keyboard activity on one screen.
 - Reproducible Arduino CLI builds, helper scripts (`flash-bridge-s3.sh`, `verify-boot.sh`), and prebuilt firmware binaries from CI.
 
 ## Current Limits
@@ -94,12 +93,15 @@ Classic ESP32 boards cannot host USB MIDI from their onboard USB connector alone
 ## Quick Start
 
 1. **Get hardware** — ESP32-S3-USB-OTG (recommended) or classic ESP32 + MAX3421E.
-2. **Flash firmware** — recommended one-liner:
+2. **Flash firmware** — easiest option for the ESP32-S3-USB-OTG board:
+   [Flash in browser](https://guitarbeat.github.io/esp32-midi-bridge/) with desktop Chrome or Edge.
+
+   Developer fallback:
    ```bash
    ./scripts/flash-bridge-s3.sh
    ./scripts/verify-boot.sh
    ```
-   Or download the latest `bridge-s3` `.bin` from [GitHub Actions](https://github.com/guitarbeat/esp32-cyd-midi-ble-bridge/actions) and see [BUILD.md](BUILD.md).
+   Or download the latest `bridge-s3` `.bin` from [GitHub Actions](https://github.com/guitarbeat/esp32-midi-bridge/actions) and see [BUILD.md](BUILD.md).
 3. **Wire the piano** — keyboard → Type-A host; board powered (including `USB_DEV` on the OTG board).
 4. **Pair in your app** — open GarageBand (or your MIDI app) → Bluetooth MIDI devices → connect to **Piano BLE Bridge**.
 5. **Play** — the display should show USB ready and BLE MIDI ready; note events should appear in the app.

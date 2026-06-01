@@ -44,6 +44,27 @@ Do **not** use `PSRAM=enabled` on this board — boot logs show
 
 Replace the port with your board (`arduino-cli board list`).
 
+## Browser Flashing
+
+The latest `main` build is published as a GitHub Pages web flasher:
+
+```text
+https://guitarbeat.github.io/esp32-midi-bridge/
+```
+
+Use desktop Chrome or Edge. Safari, Firefox, and iOS browsers do not reliably
+support the Web Serial flow used by ESP Web Tools. Connect the ESP32-S3-USB-OTG
+board through its USB Serial/JTAG port, close Arduino Serial Monitor and
+`read_serial.py`, then choose the serial port in the browser.
+
+The web flasher is only for the official ESP32-S3-USB-OTG product firmware
+(`PartitionScheme=default_8MB,USBMode=hwcdc`, no PSRAM). It does not publish the
+classic ESP32/MAX3421E fallback firmware to avoid accidental wrong-board flashes.
+
+If the board is not visible as a serial device to the browser, the web flasher
+cannot recover it. Use the command-line recovery and manual BOOT/RESET workflow
+below.
+
 **After USB Serial/JTAG upload:** the default Arduino reset often leaves the chip in
 **download mode** (`waiting for download` in serial, blank display). Either:
 
@@ -119,8 +140,10 @@ if standard USB-MIDI event packets are not present. See
 
 ### Prebuilt binary
 
-CI builds `./firmware/bridge-s3` and uploads `bridge-s3.ino.bin` as a
-workflow artifact on each push. Download it from the Actions tab for your branch.
+CI builds `./firmware/bridge-s3`, publishes the browser-flash merged binary to
+GitHub Pages on `main`, and uploads `bridge-s3.ino.bin` plus the web-flash image
+as workflow artifacts on each push. Download them from the Actions tab for your
+branch when you need manual flashing.
 
 Flash with `esptool.py` or the Arduino IDE “Flash from file” if you use a third-party
 flasher; match the same board/partition settings as above.
@@ -166,7 +189,7 @@ arduino-cli compile \
 | **MENU** | 14 | Tap: cycle MIDI channel filter (all → ch1…ch16) |
 | **MENU** (hold ~1 s) | 14 | Cycle backlight dim timeout (30s / 90s / 3m / never) |
 | **MENU** (hold ~4 s) | 14 | Open WiFi setup AP (captive portal) |
-| **OK** / Boot | 0 | Tap: cycle display mode (Full → Performance → Minimal → Stage) |
+| **OK** / Boot | 0 | Tap: confirm unified view |
 | **OK** (hold ~1 s) | 0 | Send **All Notes Off** on BLE (panic) |
 | **OK** (hold ~2.5 s) | 0 | Pause / resume USB→BLE forwarding |
 
@@ -206,7 +229,7 @@ Enabled by default. Routes USB MIDI to **RTP-MIDI on port 5004** while BLE stays
    - A captive portal should open; if not, browse to **http://192.168.4.1**
    - Pick your home WiFi, enter the password, and tap **Save and connect**. The board reboots and joins your LAN.
 4. **Re-open setup later:** hold **MENU** for ~4 seconds on the ESP32-S3-USB-OTG board.
-5. On macOS: **Audio MIDI Setup → MIDI Studio → Network** — add a session with the bridge’s IP (Full display shows `RTP x.x.x.x` when Wi-Fi is up) and port **5004**.
+5. On macOS: **Audio MIDI Setup → MIDI Studio → Network** — add a session with the bridge’s IP (shown on the unified display when Wi-Fi is up) and port **5004**.
 
 Optional compile-time fallback (skips the portal on first boot if NVS is empty): copy `wifi_secrets.example.h` to `wifi_secrets.h` and set `WIFI_SSID_TEXT` / `WIFI_PASSWORD_TEXT` before building.
 

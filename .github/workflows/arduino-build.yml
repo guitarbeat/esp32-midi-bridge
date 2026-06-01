@@ -4,6 +4,15 @@ on:
   push:
   pull_request:
 
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   compile:
     runs-on: ubuntu-latest
@@ -32,6 +41,69 @@ jobs:
             --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
             ./firmware/bridge-s3
 
+      - name: Build GitHub Pages web flasher
+        run: |
+          set -euo pipefail
+          mkdir -p site/firmware
+          cp -R web-flasher/. site/
+
+          ESPTOOL="$(find "$HOME/.arduino15/packages/esp32/tools/esptool_py" -name esptool -type f | sort -V | tail -1)"
+          BOOT_APP0="$(find "$HOME/.arduino15/packages/esp32/hardware/esp32" -path '*/tools/partitions/boot_app0.bin' -type f | sort -V | tail -1)"
+
+          if [[ -z "$ESPTOOL" || -z "$BOOT_APP0" ]]; then
+            echo "Could not locate esptool or boot_app0.bin" >&2
+            exit 1
+          fi
+
+          "$ESPTOOL" --chip esp32s3 merge-bin \
+            -o site/firmware/bridge-s3-esp32s3-usb-otg.bin \
+            --pad-to-size 8MB \
+            --flash-mode keep \
+            --flash-freq keep \
+            --flash-size keep \
+            0x0 dist/s3/bridge-s3.ino.bootloader.bin \
+            0x8000 dist/s3/bridge-s3.ino.partitions.bin \
+            0xe000 "$BOOT_APP0" \
+            0x10000 dist/s3/bridge-s3.ino.bin
+
+          VERSION="${GITHUB_SHA::7}"
+          cat > site/manifest.json <<EOF
+          {
+            "name": "Piano BLE Bridge",
+            "version": "$VERSION",
+            "new_install_prompt_erase": true,
+            "builds": [
+              {
+                "chipFamily": "ESP32-S3",
+                "improv": false,
+                "parts": [
+                  {
+                    "path": "firmware/bridge-s3-esp32s3-usb-otg.bin",
+                    "offset": 0
+                  }
+                ]
+              }
+            ]
+          }
+          EOF
+
+      - name: Validate web flasher assets
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          site = Path("site")
+          manifest = json.loads((site / "manifest.json").read_text())
+          assert manifest["builds"][0]["chipFamily"] == "ESP32-S3"
+          part = manifest["builds"][0]["parts"][0]
+          assert part["offset"] == 0
+          firmware = site / part["path"]
+          assert firmware.is_file(), firmware
+          assert firmware.stat().st_size == 8 * 1024 * 1024, firmware.stat().st_size
+          assert (site / "index.html").is_file()
+          PY
+
       - name: Upload S3 firmware artifact
         uses: actions/upload-artifact@v4
         with:
@@ -40,10 +112,34 @@ jobs:
             dist/s3/bridge-s3.ino.bin
             dist/s3/bridge-s3.ino.bootloader.bin
             dist/s3/bridge-s3.ino.partitions.bin
+            site/firmware/bridge-s3-esp32s3-usb-otg.bin
           if-no-files-found: error
+
+      - name: Configure GitHub Pages
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v5
+
+      - name: Upload GitHub Pages artifact
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
 
       - name: Compile classic ESP32 MAX3421E fallback
         run: |
           arduino-cli compile \
             --fqbn esp32:esp32:esp32 \
             ./firmware/bridge-classic
+
+  deploy-pages:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: compile
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Deploy GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

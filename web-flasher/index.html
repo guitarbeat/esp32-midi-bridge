@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Piano BLE Bridge Web Flasher</title>
+  <meta name="description" content="Flash Piano BLE Bridge firmware to an ESP32-S3-USB-OTG board from Chrome or Edge.">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%230b0d12'/%3E%3Cpath d='M8 22V10h4v12H8Zm6 0V10h4v12h-4Zm6 0V10h4v12h-4Z' fill='%2339d2c0'/%3E%3C/svg%3E">
+  <script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js?module"></script>
+  <style>
+    :root {
+      color-scheme: dark;
+      --bg: #101010;
+      --panel: #191919;
+      --panel-2: #141414;
+      --text: #f1f1ec;
+      --muted: #b8b8ad;
+      --line: #333333;
+      --accent: #39d2c0;
+      --warn: #f2b84b;
+      --danger: #ff756b;
+      --esp-tools-button-color: #2bb9aa;
+      --esp-tools-button-text-color: #071012;
+      --esp-tools-button-border-radius: 6px;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    main {
+      width: min(960px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 40px 0;
+    }
+
+    header {
+      display: grid;
+      gap: 16px;
+      margin-bottom: 28px;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    h1 {
+      max-width: 760px;
+      margin: 0;
+      font-size: 42px;
+      line-height: 1.08;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0;
+      color: var(--muted);
+      line-height: 1.6;
+    }
+
+    a {
+      color: var(--accent);
+    }
+
+    .layout {
+      display: grid;
+      grid-template-columns: minmax(0, 1.1fr) minmax(280px, 0.9fr);
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      background: var(--panel);
+      border-radius: 8px;
+      padding: 22px;
+    }
+
+    .install {
+      display: grid;
+      gap: 18px;
+      background: var(--panel-2);
+    }
+
+    .button-wrap {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      flex-wrap: wrap;
+      padding-top: 4px;
+    }
+
+    .hint {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .warning {
+      border-left: 3px solid var(--warn);
+      padding: 12px 14px;
+      background: rgba(242, 184, 75, 0.08);
+      color: #f8dfaa;
+      border-radius: 4px;
+    }
+
+    .danger {
+      border-left-color: var(--danger);
+      background: rgba(255, 117, 107, 0.08);
+      color: #ffd0cc;
+    }
+
+    h2 {
+      margin: 0 0 12px;
+      font-size: 18px;
+      letter-spacing: 0;
+    }
+
+    ol {
+      display: grid;
+      gap: 12px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+      counter-reset: step;
+    }
+
+    .step {
+      counter-increment: step;
+      position: relative;
+      padding: 16px 16px 16px 50px;
+      border-top: 1px solid var(--line);
+    }
+
+    .step::before {
+      content: counter(step);
+      position: absolute;
+      left: 16px;
+      top: 16px;
+      display: grid;
+      place-items: center;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: var(--accent);
+      color: #071012;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    code {
+      color: #d7fff8;
+      background: #071016;
+      border: 1px solid #1b3337;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+
+    footer {
+      margin-top: 28px;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    @media (max-width: 760px) {
+      main {
+        width: min(100% - 24px, 960px);
+        padding: 24px 0;
+      }
+
+      h1 {
+        font-size: 32px;
+      }
+
+      .layout {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div class="eyebrow">Piano BLE Bridge</div>
+      <h1>Flash the ESP32-S3 USB MIDI bridge from your browser.</h1>
+      <p>
+        This installer flashes the latest <code>bridge-s3</code> firmware for the official
+        Espressif ESP32-S3-USB-OTG development board. It is for the 8 MB, no-PSRAM target.
+      </p>
+    </header>
+
+    <div class="layout">
+      <section class="panel install" aria-labelledby="install-title">
+        <div>
+          <h2 id="install-title">Install Firmware</h2>
+          <p>Use a desktop Chrome or Edge browser and connect the board's USB Serial/JTAG port.</p>
+        </div>
+
+        <div class="warning">
+          Close Arduino Serial Monitor, <code>read_serial.py</code>, and other serial tools before flashing.
+        </div>
+
+        <div class="warning danger">
+          Do not use this for classic ESP32 boards. Classic ESP32 needs the separate MAX3421E fallback firmware.
+        </div>
+
+        <div class="button-wrap">
+          <esp-web-install-button manifest="manifest.json">
+            <button slot="activate">Connect and Flash</button>
+            <span slot="unsupported">Use desktop Chrome or Edge. This browser does not support Web Serial.</span>
+            <span slot="not-allowed">Open this page over HTTPS to enable Web Serial.</span>
+          </esp-web-install-button>
+          <span class="hint">You may need to press RESET once after flashing.</span>
+        </div>
+      </section>
+
+      <section class="panel" aria-labelledby="steps-title">
+        <h2 id="steps-title">Before You Start</h2>
+        <ol>
+          <li class="step">
+            <p>Connect the ESP32-S3-USB-OTG board to your computer through USB Serial/JTAG.</p>
+          </li>
+          <li class="step">
+            <p>Select the serial port in the browser dialog and approve the connection.</p>
+          </li>
+          <li class="step">
+            <p>After flashing, wire your keyboard to the Type-A USB HOST port and power <code>USB_DEV</code>.</p>
+          </li>
+        </ol>
+      </section>
+    </div>
+
+    <footer>
+      Source, command-line flashing, and troubleshooting:
+      <a href="https://github.com/guitarbeat/esp32-midi-bridge">github.com/guitarbeat/esp32-midi-bridge</a>
+    </footer>
+  </main>
+</body>
+</html>

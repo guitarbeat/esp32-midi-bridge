@@ -30,10 +30,7 @@ struct BridgeUiDiagnostics {
 class BridgeUi {
 public:
     enum class DisplayMode : uint8_t {
-        kFull = 0,
-        kPerformance,
-        kMinimal,
-        kStage,
+        kUnified = 0,
         kModeCount
     };
 
@@ -48,24 +45,16 @@ public:
     void notifyStatus(const char* text, uint16_t color);
 
     DisplayMode displayMode() const { return displayMode_; }
-    void setDisplayMode(DisplayMode mode) { displayMode_ = mode; }
+    void setDisplayMode(DisplayMode mode) { (void)mode; displayMode_ = DisplayMode::kUnified; }
     void cycleDisplayMode();
 
 private:
     void drawHeader(uint32_t nowMs);
     void drawStatusRow(uint32_t nowMs);
     void drawStatsRow();
-    void drawConsole(uint32_t nowMs, uint8_t maxLines);
-    void drawFullMode(uint32_t nowMs);
-    void drawPerformanceMode();
-    void drawMinimalMode();
-    void drawStageMode();
-    void drawTransportRail(int16_t y);
+    void drawUnifiedMode(uint32_t nowMs);
     void drawLivePanel(int16_t y);
     void drawVelocityBar(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t velocity);
-    void drawMetricStrip(int16_t y);
-    void drawShortText(const char* text, int16_t x, int16_t y, int16_t maxW, uint16_t color, uint8_t textSize);
-    void drawPerformanceSummary(int16_t y);
     void drawMiniKeyboard(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t firstNote, uint8_t noteCount);
     uint8_t keyboardFirstNote() const { return keyboardFirstNote_; }
     void updateKeyboardViewport();
@@ -76,7 +65,7 @@ private:
     Board* board_ = nullptr;
     BridgeUiDiagnostics diagnostics_{};
     
-    DisplayMode displayMode_ = DisplayMode::kFull;
+    DisplayMode displayMode_ = DisplayMode::kUnified;
     uint8_t keyboardFirstNote_ = 48;
     uint32_t lastRefreshMs_ = 0;
     uint32_t lastMidiMs_ = 0;

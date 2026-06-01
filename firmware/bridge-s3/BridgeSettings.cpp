@@ -60,7 +60,7 @@ void BridgeSettings::load()
     if (midiChannel_ > 16) {
         midiChannel_ = 0;
     }
-    if (displayMode_ >= 4) {
+    if (displayMode_ >= 1) {
         displayMode_ = 0;
     }
 
@@ -87,6 +87,7 @@ void BridgeSettings::saveAll()
 
 void BridgeSettings::saveDisplayMode(uint8_t mode)
 {
+    mode = 0;
     if (displayMode_ == mode) return;
     displayMode_ = mode;
     saveAll();
@@ -189,7 +190,7 @@ void BridgeSettings::printSummary() const
     } else {
         Serial.printf("  Backlight dim: %lus idle\n", backlightDimMs_ / 1000);
     }
-    Serial.printf("  Display mode index: %u\n", displayMode_);
+    Serial.println("  Display view: unified");
     Serial.printf("  UART MIDI: %s at %u baud\n", uartEnabled_ ? "ON" : "OFF", uartBaudRate_);
-    Serial.println("[SETTINGS] Buttons: UP/DOWN=transpose, MENU=ch, MENU hold=dim/wifi, OK=mode, OK hold=panic/pause");
+    Serial.println("[SETTINGS] Buttons: UP/DOWN=transpose, MENU=ch, MENU hold=dim/wifi, OK=view, OK hold=panic/pause");
 }
