@@ -32,11 +32,12 @@ public:
     void task() override;
 
     const char* name() const override { return "USB-HOST"; }
+    TransportKind kind() const override { return TransportKind::kUsbHost; }
     bool isConnected() const override { return isReady; }
+    bool canSend() const override { return isReady && outTransfer != nullptr && midiOutQueue != nullptr; }
     bool isPrimaryInbound() const override { return true; }
     bool sendMidi(const uint8_t* packet, size_t length) override { return sendMidiMessage(packet, length); }
 
-    bool canSend() const { return outTransfer != nullptr && midiOutQueue != nullptr; }
     bool sendMidiMessage(const uint8_t* data, size_t length);
 
     const String& getLastError() const { return lastError; }
@@ -62,6 +63,7 @@ protected:
     usb_transfer_t* outTransfer;
     QueueHandle_t midiOutQueue;
     volatile bool outTransferBusy;
+    portMUX_TYPE outMux;
 
     static constexpr int QUEUE_SIZE = 64;
     RawUsbMessage usbQueue[QUEUE_SIZE];

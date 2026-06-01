@@ -104,14 +104,25 @@ workflow artifact on each push. Download it from the Actions tab for your branch
 Flash with `esptool.py` or the Arduino IDE “Flash from file” if you use a third-party
 flasher; match the same board/partition settings as above.
 
-### Optional: BLE → USB reverse path
+### Hub mode and USB reverse path
 
-Default build is **one-way** (USB IN → BLE). To enable sending MIDI from a BLE app
-back to the USB device (only if the device exposes a USB MIDI OUT endpoint):
+Default `bridge-s3` firmware runs in hub mode:
+
+- USB host MIDI input broadcasts to BLE, RTP-MIDI, and optional UART outputs.
+- BLE, RTP-MIDI, and optional UART input can write back to the USB keyboard when
+  the keyboard exposes a USB MIDI OUT endpoint.
+- The display shows **USB OUT READY** when that reverse path is available and
+  **USB OUT N/A** when the attached keyboard is input-only.
+
+This is not native USB-device passthrough to a Mac/iPad on the ESP32-S3-USB-OTG
+board. The native USB peripheral is consumed by host mode; use BLE, RTP-MIDI, or
+UART as the downstream app/computer path unless you change hardware topology.
+
+MIDI Clock is filtered by default to avoid flooding receivers. To forward it:
 
 ```bash
 arduino-cli compile \
-  --build-property 'build.extra_flags=-DENABLE_BLE_TO_USB=1' \
+  --build-property 'build.extra_flags=-DENABLE_MIDI_CLOCK_PASSTHROUGH=1' \
   --fqbn 'esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc' \
   ./firmware/bridge-s3
 ```
@@ -164,7 +175,7 @@ arduino-cli compile \
 
 ### WiFi RTP-MIDI (Apple MIDI)
 
-Enabled by default. Mirrors USB MIDI to **RTP-MIDI on port 5004** while BLE stays active (same LAN as your Mac). Uses the [AppleMIDI](https://github.com/lathoub/Arduino-AppleMidi-Library) library.
+Enabled by default. Routes USB MIDI to **RTP-MIDI on port 5004** while BLE stays active, and accepts inbound RTP-MIDI short messages as another bridge source. Uses the [AppleMIDI](https://github.com/lathoub/Arduino-AppleMidi-Library) library.
 
 1. Install: `arduino-cli lib install AppleMIDI`
 2. Flash firmware (RTP is on unless you set `ENABLE_RTP_MIDI` to `0` in `RTPMidiConfig.h`).
@@ -179,6 +190,7 @@ Enabled by default. Mirrors USB MIDI to **RTP-MIDI on port 5004** while BLE stay
 Optional compile-time fallback (skips the portal on first boot if NVS is empty): copy `wifi_secrets.example.h` to `wifi_secrets.h` and set `WIFI_SSID_TEXT` / `WIFI_PASSWORD_TEXT` before building.
 
 Wi-Fi uses DHCP. RTP forwards only after a host connects to the RTP session.
+Inbound RTP-MIDI handles Note On/Off, CC, Program Change, Channel Pressure, Pitch Bend, and Start/Stop/Continue.
 
 To disable RTP-MIDI (BLE-only build), set `#define ENABLE_RTP_MIDI 0` in `RTPMidiConfig.h`.
 

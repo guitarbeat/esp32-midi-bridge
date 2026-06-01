@@ -11,6 +11,12 @@
 #define ENABLE_RTP_MIDI 1
 #define ENABLE_OTA 1
 
+// MIDI clock can be extremely chatty. Keep it filtered for v1 hub mode unless a
+// timing-sensitive setup explicitly opts in at compile time.
+#ifndef ENABLE_MIDI_CLOCK_PASSTHROUGH
+#define ENABLE_MIDI_CLOCK_PASSTHROUGH 0
+#endif
+
 #if ENABLE_RTP_MIDI
 #if __has_include("wifi_secrets.h")
 #include "wifi_secrets.h"

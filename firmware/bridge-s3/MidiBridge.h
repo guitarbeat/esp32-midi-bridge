@@ -19,10 +19,19 @@ constexpr uint16_t kRouteFail = 0xF800;  // red
 
 class MidiBridge {
 public:
+    struct RouteStats {
+        uint32_t received = 0;
+        uint32_t sent = 0;
+        uint32_t skipped = 0;
+        uint32_t failed = 0;
+    };
+
     struct Counters {
-        uint32_t usbPacketsSeen = 0;
-        uint32_t blePacketsSent = 0;
-        uint32_t blePacketsSkipped = 0;
+        RouteStats transport[kTransportKindCount];
+        uint32_t filteredActiveSense = 0;
+        uint32_t filteredClock = 0;
+        uint32_t filteredSysex = 0;
+        uint32_t filteredOther = 0;
     };
 
     enum class Result : uint8_t {
@@ -41,6 +50,7 @@ public:
     Result route(Transport* source, const uint8_t* data, size_t length);
 
     const Counters& counters() const { return counters_; }
+    const RouteStats& statsFor(TransportKind kind) const { return counters_.transport[transportKindIndex(kind)]; }
 
 private:
     BridgeUi* ui_ = nullptr;
@@ -51,6 +61,7 @@ private:
 
     void onMidiReceived(Transport* source, const uint8_t* data, size_t length);
     void notifyRouteUi(const uint8_t* data, size_t length, uint16_t color);
+    RouteStats& statsForMutable(TransportKind kind) { return counters_.transport[transportKindIndex(kind)]; }
     bool isPaused() const;
 };
 

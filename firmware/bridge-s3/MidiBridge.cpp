@@ -12,6 +12,39 @@ public:
 };
 #endif
 
+namespace {
+
+bool isChannelVoice(uint8_t status)
+{
+    return status >= 0x80 && status < 0xF0;
+}
+
+bool isShortSystemMessage(uint8_t status)
+{
+    switch (status) {
+        case 0xF1:  // MIDI Time Code Quarter Frame
+        case 0xF2:  // Song Position Pointer
+        case 0xF3:  // Song Select
+        case 0xF6:  // Tune Request
+#if ENABLE_MIDI_CLOCK_PASSTHROUGH
+        case 0xF8:  // Timing Clock
+#endif
+        case 0xFA:  // Start
+        case 0xFB:  // Continue
+        case 0xFC:  // Stop
+            return true;
+        default:
+            return false;
+    }
+}
+
+bool isAllowedShortMidi(uint8_t status)
+{
+    return isChannelVoice(status) || isShortSystemMessage(status);
+}
+
+}  // namespace
+
 MidiBridge midiBridge;
 
 void MidiBridge::begin(BridgeUi* ui, std::function<bool()> isPaused)
@@ -55,16 +88,34 @@ void MidiBridge::notifyRouteUi(const uint8_t* data, size_t length, uint16_t colo
 
 MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, size_t length)
 {
-    if (source != nullptr && source->isPrimaryInbound()) {
-        counters_.usbPacketsSeen++;
-    }
-
     if (data == nullptr || length < 1) {
         return Result::kIgnored;
     }
 
+    if (source != nullptr) {
+        statsForMutable(source->kind()).received++;
+    }
+
     const uint8_t status = data[0];
-    if (status == 0xFE || status == 0xF8) {
+    if (status == 0xFE) {
+        counters_.filteredActiveSense++;
+        return Result::kFiltered;
+    }
+
+#if !ENABLE_MIDI_CLOCK_PASSTHROUGH
+    if (status == 0xF8) {
+        counters_.filteredClock++;
+        return Result::kFiltered;
+    }
+#endif
+
+    if (status == 0xF0 || status == 0xF7) {
+        counters_.filteredSysex++;
+        return Result::kFiltered;
+    }
+
+    if (!isAllowedShortMidi(status)) {
+        counters_.filteredOther++;
         return Result::kFiltered;
     }
 
@@ -72,8 +123,9 @@ MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, siz
     const size_t processLen = length > sizeof(rawMidi) ? sizeof(rawMidi) : length;
     memcpy(rawMidi, data, processLen);
 
-    if (engine_ != nullptr && (status >= 0x80 && status < 0xF0)) {
+    if (engine_ != nullptr && isChannelVoice(status)) {
         if (!engine_->prepareOutbound(rawMidi, processLen)) {
+            counters_.filteredOther++;
             return Result::kFiltered;
         }
     }
@@ -83,33 +135,35 @@ MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, siz
         return Result::kFiltered;
     }
 
-    bool forwardedPrimary = false;
+    bool forwarded = false;
+    bool failed = false;
     for (auto* t : transports_) {
         if (t == source) {
             continue;
         }
 
-        if (!t->isConnected()) {
-            if (t->isPrimaryOutbound()) {
-                counters_.blePacketsSkipped++;
-                notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteSkip);
-            }
+        RouteStats& targetStats = statsForMutable(t->kind());
+        if (!t->canSend()) {
+            targetStats.skipped++;
             continue;
         }
 
         if (t->sendMidi(rawMidi, processLen)) {
-            if (t->isPrimaryOutbound()) {
-                counters_.blePacketsSent++;
-                notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteOk);
-                forwardedPrimary = true;
-            }
-        } else if (t->isPrimaryOutbound()) {
-            counters_.blePacketsSkipped++;
-            notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteFail);
+            targetStats.sent++;
+            forwarded = true;
+        } else {
+            targetStats.failed++;
+            failed = true;
         }
     }
 
-    return forwardedPrimary ? Result::kForwarded : Result::kFiltered;
+    if (forwarded) {
+        notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteOk);
+        return Result::kForwarded;
+    }
+
+    notifyRouteUi(rawMidi, processLen, failed ? BridgeColors::kRouteFail : BridgeColors::kRouteSkip);
+    return Result::kFiltered;
 }
 
 void MidiBridge::onMidiReceived(Transport* source, const uint8_t* data, size_t length)

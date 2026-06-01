@@ -74,6 +74,7 @@ USBConnection::USBConnection()
     outTransfer(nullptr),
     midiOutQueue(nullptr),
     outTransferBusy(false),
+    outMux(portMUX_INITIALIZER_UNLOCKED),
     queueHead(0),
     queueTail(0),
     queueMux(portMUX_INITIALIZER_UNLOCKED),
@@ -395,7 +396,6 @@ bool USBConnection::sendMidiMessage(const uint8_t* data, size_t length)
         return false;
     }
 
-    processMidiOutQueue();
     return true;
 }
 
@@ -405,11 +405,18 @@ void USBConnection::processMidiOutQueue()
         return;
     }
 
+    portENTER_CRITICAL(&outMux);
     if (outTransferBusy) {
+        portEXIT_CRITICAL(&outMux);
         return;
     }
+    outTransferBusy = true;
+    portEXIT_CRITICAL(&outMux);
 
     if (uxQueueMessagesWaiting(midiOutQueue) == 0) {
+        portENTER_CRITICAL(&outMux);
+        outTransferBusy = false;
+        portEXIT_CRITICAL(&outMux);
         return;
     }
 
@@ -425,14 +432,18 @@ void USBConnection::processMidiOutQueue()
     }
 
     if (bytesToSend == 0) {
+        portENTER_CRITICAL(&outMux);
+        outTransferBusy = false;
+        portEXIT_CRITICAL(&outMux);
         return;
     }
 
     outTransfer->num_bytes = bytesToSend;
-    outTransferBusy = true;
     const esp_err_t err = usb_host_transfer_submit(outTransfer);
     if (err != ESP_OK) {
+        portENTER_CRITICAL(&outMux);
         outTransferBusy = false;
+        portEXIT_CRITICAL(&outMux);
         USB_LOG("[USB] OUT submit failed: %d\n", err);
     }
 }
@@ -443,8 +454,9 @@ void USBConnection::_onSendComplete(usb_transfer_t* transfer)
     if (usbCon == nullptr) {
         return;
     }
+    portENTER_CRITICAL(&usbCon->outMux);
     usbCon->outTransferBusy = false;
-    usbCon->processMidiOutQueue();
+    portEXIT_CRITICAL(&usbCon->outMux);
 }
 
 bool USBConnection::_isMidiInterface(const usb_intf_desc_t* intf) const

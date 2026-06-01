@@ -33,7 +33,9 @@ public:
 
     // Transport implementation
     const char* name() const override { return "BLE-MIDI"; }
+    TransportKind kind() const override { return TransportKind::kBle; }
     bool isConnected() const override;
+    bool canSend() const override { return isSubscribed(); }
     bool isSubscribed() const { return subscribed_; }
     bool isPrimaryOutbound() const override { return true; }
     bool sendMidi(const uint8_t* data, size_t length) override;

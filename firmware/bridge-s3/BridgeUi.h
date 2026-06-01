@@ -9,12 +9,22 @@ class BLEConnection;
 class BridgeSystem;
 class USBConnection;
 
+struct BridgeUiRouteStats {
+    uint32_t received = 0;
+    uint32_t sent = 0;
+    uint32_t skipped = 0;
+    uint32_t failed = 0;
+};
+
 struct BridgeUiDiagnostics {
     const USBConnection* usb = nullptr;
     const BLEConnection* ble = nullptr;
-    uint32_t usbIn = 0;
-    uint32_t bleOut = 0;
-    uint32_t bleSkip = 0;
+    BridgeUiRouteStats usbStats;
+    BridgeUiRouteStats bleStats;
+    BridgeUiRouteStats rtpStats;
+    BridgeUiRouteStats uartStats;
+    bool rtpConnected = false;
+    bool uartEnabled = false;
 };
 
 class BridgeUi {

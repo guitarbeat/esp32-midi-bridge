@@ -17,7 +17,9 @@ public:
     
     bool begin(uint32_t baud = 31250);
     const char* name() const override { return "UART-MIDI"; }
-    bool isConnected() const override { return true; } // Always ready once initialized
+    TransportKind kind() const override { return TransportKind::kUart; }
+    bool isConnected() const override { return initialized_; }
+    bool canSend() const override { return initialized_; }
     bool sendMidi(const uint8_t* packet, size_t length) override;
     void task() override;
 

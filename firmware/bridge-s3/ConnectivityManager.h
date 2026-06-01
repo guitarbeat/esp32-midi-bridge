@@ -19,7 +19,9 @@ public:
 
     // Transport implementation
     const char* name() const override { return "RTP-MIDI"; }
+    TransportKind kind() const override { return TransportKind::kRtp; }
     bool isConnected() const override;
+    bool canSend() const override { return isConnected(); }
     bool sendMidi(const uint8_t* packet, size_t length) override;
 
     bool hasRtpSession() const;

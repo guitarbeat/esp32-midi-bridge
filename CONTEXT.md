@@ -22,11 +22,13 @@ Use these terms exactly when discussing or implementing changes. This ensures co
 
 ## Domain specifics
 
-- **MidiBridge** — The central coordinator that routes MIDI packets between transports. Calls `MidiEngine::prepareOutbound` before forwarding; channel filter and transpose gate outbound together.
+- **MidiBridge** — The central coordinator that routes MIDI packets between transports. Calls `MidiEngine::prepareOutbound` once per accepted packet before broadcasting; channel filter and transpose gate outbound together.
 - **prepareOutbound** — MidiEngine entry for routing: applies filter/transpose, updates UI state, returns false when the packet must not leave the bridge.
 - **Transport** — A physical or logical MIDI connection (USB, BLE, RTP-MIDI, UART-MIDI).
+- **TransportKind** — Stable route-stat category for a Transport: USB host, BLE, RTP-MIDI, or UART-MIDI.
+- **canSend** — Transport capability query used by MidiBridge before routing to an output. USB host returns true only when a USB MIDI OUT endpoint exists.
 - **BridgeUi** — The module responsible for all visual feedback and user input handling.
-- **ConnectivityManager** — (Planned) A deep module to manage all network-related state (WiFi, Provisioning, RTP-MIDI).
+- **ConnectivityManager** — A deep module that manages all network-related state (WiFi, Provisioning, RTP-MIDI).
 
 ## Rejected framings
 

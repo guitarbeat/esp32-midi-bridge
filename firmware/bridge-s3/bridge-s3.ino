@@ -24,6 +24,16 @@ static USBConnection usbMidi;
 static BLEConnection bleMidi;
 static UartConnection uartMidi(Serial2, 48 /* RX */, 47 /* TX */);
 
+static BridgeUiRouteStats toUiStats(const MidiBridge::RouteStats& stats)
+{
+    BridgeUiRouteStats uiStats;
+    uiStats.received = stats.received;
+    uiStats.sent = stats.sent;
+    uiStats.skipped = stats.skipped;
+    uiStats.failed = stats.failed;
+    return uiStats;
+}
+
 void setup()
 {
     Serial.begin(115200);
@@ -129,9 +139,12 @@ void loop()
         BridgeUiDiagnostics diag;
         diag.usb = &usbMidi;
         diag.ble = &bleMidi;
-        diag.usbIn = midiBridge.counters().usbPacketsSeen;
-        diag.bleOut = midiBridge.counters().blePacketsSent;
-        diag.bleSkip = midiBridge.counters().blePacketsSkipped;
+        diag.usbStats = toUiStats(midiBridge.statsFor(TransportKind::kUsbHost));
+        diag.bleStats = toUiStats(midiBridge.statsFor(TransportKind::kBle));
+        diag.rtpStats = toUiStats(midiBridge.statsFor(TransportKind::kRtp));
+        diag.uartStats = toUiStats(midiBridge.statsFor(TransportKind::kUart));
+        diag.rtpConnected = connectivityManager.hasRtpSession();
+        diag.uartEnabled = bridgeSystem.settings().uartEnabled();
         bridgeUi.setDiagnostics(diag);
         bridgeUi.refresh(now);
         canvas->flush();

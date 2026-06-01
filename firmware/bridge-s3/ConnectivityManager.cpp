@@ -21,6 +21,11 @@ ConnectivityManager::ConnectivityManager() {}
 void ConnectivityManager::begin()
 {
 #if ENABLE_RTP_MIDI
+    g_rtp.setReceiveCallback([this](const uint8_t* data, size_t length) {
+        if (receiveCallback_ != nullptr) {
+            receiveCallback_(data, length);
+        }
+    });
     g_rtp.begin("ESP32-MIDI-STATION");
 #if ENABLE_OTA
     otaUpdate.begin("esp32-midi-bridge");

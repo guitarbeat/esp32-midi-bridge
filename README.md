@@ -26,8 +26,9 @@ MIDI adapter). This project is an open, hackable replacement for that device:
 ## What Works
 
 - USB MIDI input from class-compliant digital pianos and MIDI controllers.
+- Hub-style routing: USB host MIDI broadcasts to BLE, RTP-MIDI, and optional UART outputs; BLE/RTP/UART can also write back to USB when the keyboard exposes a USB MIDI OUT endpoint.
 - Bluetooth LE MIDI output to iOS, iPadOS, macOS, Android, and desktop apps.
-- **WiFi RTP-MIDI** (Apple MIDI) alongside BLE — captive-portal setup on first boot; see [BUILD.md](BUILD.md).
+- **WiFi RTP-MIDI** (Apple MIDI) as both an output and input transport — captive-portal setup on first boot; see [BUILD.md](BUILD.md).
 - **OTA updates** over WiFi when on your LAN — no USB cable for routine firmware flashes; see [BUILD.md](BUILD.md).
 - A visible startup/status screen on the Espressif ESP32-S3-USB-OTG board.
 - **Bongo Cat** sprite animation (from [vostoklabs/bongo_cat_monitor](https://github.com/vostoklabs/bongo_cat_monitor)) driven by your playing.
@@ -41,9 +42,9 @@ MIDI adapter). This project is an open, hackable replacement for that device:
 
 ## Current Limits
 
-- One-way by default: piano → BLE (USB host IN → BLE notify).
-- Optional compile-time BLE → USB (see [BUILD.md](BUILD.md)); most digital pianos
-  are receive-only over USB, so this rarely applies.
+- This is **not** native USB-device passthrough to a Mac/iPad on the ESP32-S3-USB-OTG board. The native USB path is used for host mode, so use BLE, RTP-MIDI, or UART for downstream apps unless you add different hardware/topology.
+- USB reverse routing only works when the connected keyboard exposes a USB MIDI OUT endpoint. Most digital pianos are receive-only over USB, so the display may show **USB OUT N/A**.
+- SysEx passthrough is deferred; v1 hub mode forwards short MIDI messages and filters Active Sense plus MIDI Clock by default.
 - Bluetooth audio is not supported.
 - Some keyboards need 5 V VBUS on the host port before they enumerate.
 - After USB host starts, native USB serial (`usbmodem`) may stop — use Wi-Fi debug logging for runtime diagnostics (see [BUILD.md](BUILD.md)).

@@ -135,7 +135,9 @@ void BridgeUi::drawPerformanceMode()
     gfx->setCursor(118, 78);
     gfx->printf("NPM %u", me.notesPerMinute);
     gfx->setCursor(118, 92);
-    gfx->printf("IN %lu OUT %lu", diagnostics_.usbIn, diagnostics_.bleOut);
+    gfx->printf("IN %lu OUT %lu",
+                diagnostics_.usbStats.received,
+                diagnostics_.bleStats.sent + diagnostics_.rtpStats.sent + diagnostics_.uartStats.sent);
 
     drawMiniKeyboard(8, 116, 224, 108, keyboardFirstNote(), kKeyboardVisibleNotes);
 }
@@ -215,23 +217,26 @@ void BridgeUi::drawStatusRow(uint32_t nowMs)
 {
     (void)nowMs;
 
-    auto drawChip = [&](int16_t x, int16_t y, const char* label, bool ok, const char* okText, const char* waitText, uint16_t okColor) {
-        gfx->drawRoundRect(x, y, 108, 34, 4, kPanelBorder);
+    auto drawChip = [&](int16_t x, int16_t y, int16_t w, const char* label, bool ok, const char* okText, const char* waitText, uint16_t okColor) {
+        gfx->drawRoundRect(x, y, w, 34, 4, kPanelBorder);
         gfx->setTextColor(kMutedText);
         gfx->setTextSize(1);
-        gfx->setCursor(x + 6, y + 4);
+        gfx->setCursor(x + 4, y + 4);
         gfx->print(label);
         gfx->setTextColor(ok ? okColor : RGB565_ORANGE);
-        gfx->setCursor(x + 6, y + 17);
+        gfx->setCursor(x + 4, y + 17);
         gfx->print(ok ? okText : waitText);
     };
 
     const bool usbReady = diagnostics_.usb != nullptr && diagnostics_.usb->isConnected();
+    const bool usbOutReady = diagnostics_.usb != nullptr && diagnostics_.usb->canSend();
     const bool bleLinked = diagnostics_.ble != nullptr && diagnostics_.ble->isConnected();
     const bool bleReady = diagnostics_.ble != nullptr && diagnostics_.ble->isSubscribed();
 
-    drawChip(8, 34, "USB HOST", usbReady, "READY", "WAIT", RGB565_LIME);
-    drawChip(124, 34, "BLE MIDI", bleReady, "READY", bleLinked ? "OPEN APP" : "ADV...", RGB565_CYAN);
+    drawChip(4, 34, 56, "USB IN", usbReady, "READY", "WAIT", RGB565_LIME);
+    drawChip(62, 34, 56, "USB OUT", usbOutReady, "READY", usbReady ? "N/A" : "WAIT", RGB565_LIME);
+    drawChip(120, 34, 56, "BLE", bleReady, "READY", bleLinked ? "OPEN" : "ADV", RGB565_CYAN);
+    drawChip(178, 34, 58, "RTP", diagnostics_.rtpConnected, "LINK", "WAIT", RGB565_MAGENTA);
 }
 
 void BridgeUi::drawStatsRow()
@@ -240,20 +245,21 @@ void BridgeUi::drawStatsRow()
     gfx->setTextSize(1);
     gfx->setTextColor(RGB565_LIGHTGRAY);
     gfx->setCursor(14, 78);
-    gfx->printf("IN %lu  OUT %lu  SKIP %lu", diagnostics_.usbIn, diagnostics_.bleOut, diagnostics_.bleSkip);
+    gfx->printf("RX U%lu B%lu R%lu S%lu",
+                diagnostics_.usbStats.received,
+                diagnostics_.bleStats.received,
+                diagnostics_.rtpStats.received,
+                diagnostics_.uartStats.received);
 
     gfx->setTextColor(RGB565_GOLD);
     gfx->setCursor(14, 90);
-    gfx->printf("TR %s  %s", bridgeSystem.transposeString(), bridgeSystem.channelString());
+    gfx->printf("TX U%lu B%lu R%lu S%lu",
+                diagnostics_.usbStats.sent,
+                diagnostics_.bleStats.sent,
+                diagnostics_.rtpStats.sent,
+                diagnostics_.uartStats.sent);
 
-    if (diagnostics_.usb != nullptr && diagnostics_.usb->isConnected()) {
-        const String& name = diagnostics_.usb->getDeviceName();
-        if (name.length() > 0) {
-            gfx->setTextColor(kMutedText);
-            gfx->setCursor(130, 90);
-            gfx->printf("%.12s", name.c_str());
-        }
-    } else if (diagnostics_.usb != nullptr) {
+    if (diagnostics_.usb != nullptr && !diagnostics_.usb->isConnected()) {
         const String& err = diagnostics_.usb->getLastError();
         if (err.length() > 0) {
             gfx->setTextColor(RGB565_ORANGE);

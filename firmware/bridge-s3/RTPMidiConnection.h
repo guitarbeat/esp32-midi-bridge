@@ -7,8 +7,12 @@
 #define ENABLE_RTP_MIDI 0
 #endif
 
+#include <functional>
+
 class RTPMidiConnection {
 public:
+    using MidiReceiveCallback = std::function<void(const uint8_t* packet, size_t length)>;
+
     bool begin(const char* sessionName);
     void task();
 
@@ -20,13 +24,17 @@ public:
 
     /** @brief Sends a raw MIDI message to all connected RTP peers. */
     void sendRawMidi(const uint8_t* midiPacket, size_t length);
+    void setReceiveCallback(MidiReceiveCallback cb) { receiveCallback_ = cb; }
 
 #if ENABLE_RTP_MIDI
     void onRtpConnected(uint32_t ssrc, const char* name);
     void onRtpDisconnected(uint32_t ssrc);
+    void dispatchIncoming(const uint8_t* midiPacket, size_t length);
 #endif
 
 private:
+    MidiReceiveCallback receiveCallback_ = nullptr;
+
 #if ENABLE_RTP_MIDI
     enum class WifiState : uint8_t { kOff, kConnecting, kConnected };
 
