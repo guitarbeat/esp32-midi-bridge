@@ -165,11 +165,15 @@ If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized
   piano's **USB COMPUTER** port, not the **USB MEMORY** flash-drive port.
 - Try another data-capable USB cable.
 - Check the on-screen hint: `Use HOST + power USB_DEV`.
+- For Roland F-20 specifics, see [Roland F-20 USB MIDI diagnostics](docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).
 
 ### Bluetooth Connects But No Notes in the App
 
 - If the display shows **USB WAIT**, the keyboard is not enumerated — fix power/cable first.
-- If **USB OK** but note counters stay at 0, check the piano’s USB mode (often “Generic” / class-compliant MIDI).
+- If the display shows **USB NOMID**, the USB endpoint path exists but no MIDI packets are arriving.
+- If the display shows **USB RAW**, USB packets are arriving but MIDI decoding is dropping them.
+- If the display shows **USB MIDI** but the app is silent, check BLE/RTP app input routing.
+- If **USB OK** but note counters stay at 0 on older builds, check the piano’s USB mode (often “Generic” / class-compliant MIDI).
 - If the display shows **BLE OPEN APP**, the phone/tablet has connected but the MIDI app has not subscribed to BLE MIDI notifications. Open the app’s Bluetooth MIDI device list and connect there.
 - If USB counters increase but the app is silent and BLE shows ready, check the app’s **BLE MIDI input** routing.
 

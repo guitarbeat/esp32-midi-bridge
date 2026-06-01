@@ -96,6 +96,21 @@ python3 scripts/wifi_log.py
 
 USB/BLE/SYSTEM log lines that use `BRIDGE_LOG` in firmware are mirrored over UDP when Wi-Fi is connected.
 
+### Roland F-20 debugging note
+
+`F-20_MI.pdf` is a MIDI Implementation reference, not a USB descriptor reference.
+It confirms the F-20 should transmit standard MIDI 1.0 messages after a MIDI
+transport exists: Note On/Off, Bank Select, Program Change, Hold CC64,
+Sostenuto CC66, Soft CC67, Reverb CC91, and Identity Reply SysEx. The current
+bridge parser already handles those short messages.
+
+If the display reports `No USB MIDI interface`, `USB WAIT`, or `USB NOMID`, debug
+USB enumeration first. Connect the Roland **USB COMPUTER** port directly to a Mac
+and verify it appears in **Audio MIDI Setup -> MIDI Studio**. If it appears on
+the Mac but not on the ESP32, capture the F-20 USB descriptors and adapt
+`USBConnection` endpoint matching. See
+[`docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md`](docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).
+
 ### Prebuilt binary
 
 CI builds `./firmware/bridge-s3` and uploads `bridge-s3.ino.bin` as a
