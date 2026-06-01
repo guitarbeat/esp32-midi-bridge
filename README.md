@@ -163,6 +163,9 @@ If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized
   for the piano and **USB_DEV** for 5 V.
 - On Roland pianos with both ports, connect the ESP32 **USB HOST** port to the
   piano's **USB COMPUTER** port, not the **USB MEMORY** flash-drive port.
+- On the F-20, the owner manual describes **USB COMPUTER** as the port for MIDI
+  transfer with sequencer software. **USB MEMORY** is for flash drives/wireless
+  adapter use.
 - Try another data-capable USB cable.
 - Check the on-screen hint: `Use HOST + power USB_DEV`.
 - For Roland F-20 specifics, see [Roland F-20 USB MIDI diagnostics](docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).

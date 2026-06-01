@@ -5,6 +5,25 @@ Version 1.00) describes MIDI message behavior, not USB descriptors. Use it after
 USB enumeration works; it cannot explain a `No USB MIDI interface` display state
 by itself.
 
+The F-20 owner manual (`F-20_egfispd01_W.pdf`) is more useful for connection
+debugging: it distinguishes the **USB COMPUTER** port from the **USB MEMORY**
+port. The bridge must connect to **USB COMPUTER** with a USB-B device cable. The
+**USB MEMORY** port is for flash drives or the Roland wireless USB adapter, not
+for computer/host MIDI.
+
+## Owner manual USB facts
+
+- **USB COMPUTER**: connect this port to a computer USB port with a commercially
+  available USB cable. The manual says MIDI data can be transferred between the
+  F-20 and sequencer software.
+- **USB MEMORY**: connect a USB flash drive or Roland wireless USB adapter here.
+  This port is not the MIDI-to-computer port.
+- **MIDI Transmit Channel**: the F-20 has a function-mode setting for the MIDI
+  channel it transmits on. Leave the bridge channel filter set to `ALL` while
+  debugging.
+- **Local Control**: this is relevant when a software synthesizer echoes notes
+  back over USB MIDI. It is not required for the bridge to receive key presses.
+
 ## What the F-20 should transmit
 
 Once a MIDI transport is established, the F-20 is expected to transmit standard
@@ -39,13 +58,17 @@ compliance, and descriptor capture.
 
 ## Debug order
 
-1. Connect the Roland **USB COMPUTER** port directly to a Mac with the same cable.
-2. Open **Audio MIDI Setup -> MIDI Studio** and confirm the F-20 appears.
-3. If it does not appear on the Mac, fix the Roland port/cable/piano USB mode
-   before changing firmware.
-4. If it appears on the Mac but the ESP32 shows `No USB MIDI interface`, capture
+1. Confirm the physical route: ESP32 Type-A **USB HOST** -> Roland
+   **USB COMPUTER**. Do not use Roland **USB MEMORY**.
+2. Keep ESP32 **USB_DEV** powered so the host port supplies VBUS.
+3. Connect the Roland **USB COMPUTER** port directly to a Mac with the same
+   cable.
+4. Open **Audio MIDI Setup -> MIDI Studio** and confirm the F-20 appears.
+5. If it does not appear on the Mac, fix the Roland port/cable/F-20 setup before
+   changing firmware.
+6. If it appears on the Mac but the ESP32 shows `No USB MIDI interface`, capture
    the F-20 USB descriptors and adapt `USBConnection` endpoint matching.
-5. If the ESP32 display shows `USB MIDI`, press keys and pedals and verify Note
+7. If the ESP32 display shows `USB MIDI`, press keys and pedals and verify Note
    On/Off plus CC64 increment bridge counters.
 
 ## Display diagnostics

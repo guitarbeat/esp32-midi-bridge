@@ -98,9 +98,14 @@ USB/BLE/SYSTEM log lines that use `BRIDGE_LOG` in firmware are mirrored over UDP
 
 ### Roland F-20 debugging note
 
-`F-20_MI.pdf` is a MIDI Implementation reference, not a USB descriptor reference.
-It confirms the F-20 should transmit standard MIDI 1.0 messages after a MIDI
-transport exists: Note On/Off, Bank Select, Program Change, Hold CC64,
+`F-20_egfispd01_W.pdf` confirms the F-20 **USB COMPUTER** port is the
+computer/sequencer MIDI port. The **USB MEMORY** port is for flash drives or the
+Roland wireless USB adapter and should not be connected to the ESP32 host for
+MIDI bridging.
+
+`F-20_MI.pdf` is a MIDI Implementation reference, not a USB descriptor
+reference. It confirms the F-20 should transmit standard MIDI 1.0 messages after
+a MIDI transport exists: Note On/Off, Bank Select, Program Change, Hold CC64,
 Sostenuto CC66, Soft CC67, Reverb CC91, and Identity Reply SysEx. The current
 bridge parser already handles those short messages.
 
