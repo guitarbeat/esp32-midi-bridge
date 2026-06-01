@@ -39,6 +39,11 @@ CLAUDE.md
 # Internal research docs
 docs/
 
+# Local piano manuals used during hardware debugging
+/F-20_MI.pdf
+/F-20_MIDI_Imple_e01_W.pdf
+/F-20_egfispd01_W.pdf
+
 # Local Wi-Fi credentials for optional RTP-MIDI builds
 firmware/bridge-s3/wifi_secrets.h
 firmware/bridge-s3/ota_secrets.h
