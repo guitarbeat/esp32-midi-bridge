@@ -34,6 +34,7 @@ public:
     // Transport implementation
     const char* name() const override { return "BLE-MIDI"; }
     bool isConnected() const override;
+    bool isSubscribed() const { return subscribed_; }
     bool isPrimaryOutbound() const override { return true; }
     bool sendMidi(const uint8_t* data, size_t length) override;
 
@@ -59,6 +60,7 @@ protected:
     SemaphoreHandle_t sendMutex;
     MIDIMessageCallback midiCallback;
     uint16_t avgLatencyMs_;
+    volatile bool subscribed_;
     RawBleMessage incomingQueue_[kIncomingQueueDepth];
     volatile uint8_t incomingHead_;
     volatile uint8_t incomingTail_;
@@ -67,6 +69,7 @@ protected:
     bool enqueueIncomingMidi(const uint8_t* data, size_t length);
     bool dequeueIncomingMidi(RawBleMessage& message);
     void dispatchIncomingMidi(const uint8_t* data, size_t length);
+    void setSubscribed(bool subscribed);
 };
 
 #endif // BLE_CONNECTION_H

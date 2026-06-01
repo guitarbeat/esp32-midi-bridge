@@ -1,6 +1,7 @@
 #include "BLEConnection.h"
 #include <BLE2902.h>
 
+#include "BridgeLog.h"
 #include "MidiCodec.h"
 
 void BLEConnection::processIncomingBlePacket(const uint8_t* data, size_t length)
@@ -43,6 +44,7 @@ BLEConnection::BLEConnection()
       sendMutex(nullptr),
       midiCallback(nullptr),
       avgLatencyMs_(0),
+      subscribed_(false),
       incomingHead_(0),
       incomingTail_(0),
       incomingMux_(portMUX_INITIALIZER_UNLOCKED)
@@ -71,17 +73,24 @@ void BLEConnection::begin(const std::string& deviceName) {
 
     class ServerCallbacks : public BLEServerCallbacks {
     public:
+        BLEConnection* bleCon;
+        explicit ServerCallbacks(BLEConnection* con) : bleCon(con) {}
+
         void onConnect(BLEServer* server) override {
             BLEDevice::setPower(ESP_PWR_LVL_P9);
             server->updateConnParams(server->getConnId(), 6, 12, 0, 400);
+            bleCon->setSubscribed(false);
+            BRIDGE_LOG_LN("[BLE] Central connected; waiting for MIDI notify subscription");
         }
 
         void onDisconnect(BLEServer*) override {
+            bleCon->setSubscribed(false);
+            BRIDGE_LOG_LN("[BLE] Central disconnected; advertising restarted");
             BLEDevice::startAdvertising();
         }
     };
     delete pServerCallback;
-    pServerCallback = new ServerCallbacks();
+    pServerCallback = new ServerCallbacks(this);
     pServer->setCallbacks(pServerCallback);
 
     BLEService* pService = pServer->createService(BLE_MIDI_SERVICE_UUID);
@@ -105,6 +114,15 @@ void BLEConnection::begin(const std::string& deviceName) {
                 bleCon->processIncomingBlePacket(data, rxValue.length());
             }
         }
+
+#if defined(CONFIG_NIMBLE_ENABLED)
+        void onSubscribe(BLECharacteristic*, ble_gap_conn_desc*, uint16_t subValue) override {
+            bleCon->setSubscribed(subValue > 0);
+            BRIDGE_LOG("[BLE] MIDI notify subscription %s (value=%u)\n",
+                       subValue > 0 ? "enabled" : "disabled",
+                       subValue);
+        }
+#endif
     };
 
     delete pBleCallback;
@@ -126,7 +144,7 @@ bool BLEConnection::sendMidi(const uint8_t* data, size_t length) {
     if (xSemaphoreTake(sendMutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
 
     bool sent = false;
-    if (isConnected()) {
+    if (isSubscribed()) {
         uint8_t blePacket[256];
         size_t outLen = 0;
 
@@ -215,4 +233,9 @@ void BLEConnection::dispatchIncomingMidi(const uint8_t* data, size_t length)
         midiCallback(data, length);
     }
     onMidiDataReceived(data, length);
+}
+
+void BLEConnection::setSubscribed(bool subscribed)
+{
+    subscribed_ = subscribed;
 }

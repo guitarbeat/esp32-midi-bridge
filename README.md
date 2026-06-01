@@ -101,7 +101,7 @@ Classic ESP32 boards cannot host USB MIDI from their onboard USB connector alone
    Or download the latest `bridge-s3` `.bin` from [GitHub Actions](https://github.com/guitarbeat/esp32-cyd-midi-ble-bridge/actions) and see [BUILD.md](BUILD.md).
 3. **Wire the piano** — keyboard → Type-A host; board powered (including `USB_DEV` on the OTG board).
 4. **Pair in your app** — open GarageBand (or your MIDI app) → Bluetooth MIDI devices → connect to **Piano BLE Bridge**.
-5. **Play** — the display should show USB OK and BLE connected; note events should appear in the app.
+5. **Play** — the display should show USB ready and BLE MIDI ready; note events should appear in the app.
 
 ## Bluetooth Name
 
@@ -167,7 +167,8 @@ If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized
 
 - If the display shows **USB WAIT**, the keyboard is not enumerated — fix power/cable first.
 - If **USB OK** but note counters stay at 0, check the piano’s USB mode (often “Generic” / class-compliant MIDI).
-- If USB counters increase but the app is silent, check the app’s **BLE MIDI input** routing.
+- If the display shows **BLE OPEN APP**, the phone/tablet has connected but the MIDI app has not subscribed to BLE MIDI notifications. Open the app’s Bluetooth MIDI device list and connect there.
+- If USB counters increase but the app is silent and BLE shows ready, check the app’s **BLE MIDI input** routing.
 
 ### Unplugging the Piano
 
@@ -179,7 +180,7 @@ the app’s BLE MIDI session.
 ### No Bluetooth MIDI Device Appears
 
 - Confirm the firmware booted (display shows **Piano BLE Bridge** on the OTG board).
-- Use the MIDI app’s Bluetooth MIDI menu, not only system Bluetooth on iOS.
+- Use the MIDI app’s Bluetooth MIDI menu, not only system Bluetooth on iOS. In GarageBand, use **Settings → Advanced → Bluetooth MIDI Devices**.
 - Restart the board after changing the BLE name.
 
 ### Classic ESP32 Board Does Not See USB MIDI

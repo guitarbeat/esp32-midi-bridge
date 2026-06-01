@@ -147,6 +147,10 @@ Settings persist in NVS. Changing the BLE name in NVS requires a reboot to take 
 
 Unplugging the USB keyboard no longer reboots the board — plug the piano back in; BLE MIDI should stay connected in your app.
 
+The display distinguishes BLE radio connection from BLE MIDI readiness. **BLE OPEN APP**
+means a central device connected but has not subscribed to MIDI notifications yet; open
+the MIDI app's Bluetooth MIDI device list and connect there.
+
 Backlight dims after the configured idle period; any MIDI activity wakes it.
 
 ### Custom BLE name

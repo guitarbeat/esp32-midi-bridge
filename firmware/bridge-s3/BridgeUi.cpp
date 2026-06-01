@@ -145,14 +145,15 @@ void BridgeUi::drawMinimalMode()
     const auto& me = bridgeSystem.engine().state();
     const bool usbReady = diagnostics_.usb != nullptr && diagnostics_.usb->isConnected();
     const bool bleLinked = diagnostics_.ble != nullptr && diagnostics_.ble->isConnected();
+    const bool bleReady = diagnostics_.ble != nullptr && diagnostics_.ble->isSubscribed();
 
     gfx->setTextSize(1);
     gfx->setTextColor(usbReady ? RGB565_LIME : RGB565_ORANGE);
     gfx->setCursor(20, 48);
     gfx->printf("USB %s", usbReady ? "READY" : "WAIT");
-    gfx->setTextColor(bleLinked ? RGB565_CYAN : RGB565_ORANGE);
+    gfx->setTextColor(bleReady ? RGB565_CYAN : (bleLinked ? RGB565_GOLD : RGB565_ORANGE));
     gfx->setCursor(132, 48);
-    gfx->printf("BLE %s", bleLinked ? "LINKED" : "ADV");
+    gfx->printf("BLE %s", bleReady ? "READY" : (bleLinked ? "LINK" : "ADV"));
 
     gfx->setTextColor(RGB565_WHITE);
     gfx->setTextSize(4);
@@ -227,9 +228,10 @@ void BridgeUi::drawStatusRow(uint32_t nowMs)
 
     const bool usbReady = diagnostics_.usb != nullptr && diagnostics_.usb->isConnected();
     const bool bleLinked = diagnostics_.ble != nullptr && diagnostics_.ble->isConnected();
+    const bool bleReady = diagnostics_.ble != nullptr && diagnostics_.ble->isSubscribed();
 
     drawChip(8, 34, "USB HOST", usbReady, "READY", "WAIT", RGB565_LIME);
-    drawChip(124, 34, "BLE OUT", bleLinked, "LINKED", "ADV...", RGB565_CYAN);
+    drawChip(124, 34, "BLE MIDI", bleReady, "READY", bleLinked ? "OPEN APP" : "ADV...", RGB565_CYAN);
 }
 
 void BridgeUi::drawStatsRow()
