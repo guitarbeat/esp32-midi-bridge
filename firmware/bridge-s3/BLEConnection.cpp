@@ -3,46 +3,15 @@
 
 #include "MidiCodec.h"
 
-static bool isMidiStatusByte(uint8_t byte, size_t remaining)
-{
-    if (byte < 0x80) {
-        return false;
-    }
-
-    const uint8_t msgLen = MidiCodec::lengthFromStatus(byte);
-    return msgLen > 0 && remaining >= msgLen;
-}
-
-static bool isLikelyTimestampByte(uint8_t byte, size_t pos, size_t len, const uint8_t* data)
-{
-    if (!(byte & 0x80) || byte >= 0xF8) {
-        return false;
-    }
-
-    if (byte > 0xBF) {
-        return true;
-    }
-
-    if (pos + 1 >= len) {
-        return true;
-    }
-
-    return isMidiStatusByte(data[pos + 1], len - pos - 1);
-}
-
 void BLEConnection::processIncomingBlePacket(const uint8_t* data, size_t length)
 {
-    size_t i = 0;
-
-    if (i < length && isLikelyTimestampByte(data[i], i, length, data)) {
-        i++;
-        if (i < length && (data[i] & 0x80) && isLikelyTimestampByte(data[i], i, length, data)) {
-            i++;
-        }
+    if (data == nullptr || length < 3 || !(data[0] & 0x80)) {
+        return;
     }
 
+    size_t i = 1;
     while (i < length) {
-        while (i < length && isLikelyTimestampByte(data[i], i, length, data)) {
+        if (i + 1 < length && (data[i] & 0x80) && (data[i + 1] & 0x80)) {
             i++;
         }
 
@@ -61,10 +30,7 @@ void BLEConnection::processIncomingBlePacket(const uint8_t* data, size_t length)
             break;
         }
 
-        if (midiCallback) {
-            midiCallback(data + i, msgLen);
-        }
-        onMidiDataReceived(data + i, msgLen);
+        enqueueIncomingMidi(data + i, msgLen);
         i += msgLen;
     }
 }
@@ -76,7 +42,10 @@ BLEConnection::BLEConnection()
       pServerCallback(nullptr),
       sendMutex(nullptr),
       midiCallback(nullptr),
-      avgLatencyMs_(0)
+      avgLatencyMs_(0),
+      incomingHead_(0),
+      incomingTail_(0),
+      incomingMux_(portMUX_INITIALIZER_UNLOCKED)
 {
 }
 
@@ -181,7 +150,13 @@ void BLEConnection::recordForwardLatency(uint32_t latencyMs)
     }
 }
 
-void BLEConnection::task() {}
+void BLEConnection::task()
+{
+    RawBleMessage message;
+    while (dequeueIncomingMidi(message)) {
+        dispatchIncomingMidi(message.data, message.length);
+    }
+}
 
 bool BLEConnection::isConnected() const {
     if(pServer)
@@ -197,4 +172,47 @@ void BLEConnection::onMidiDataReceived(const uint8_t* data, size_t length) {
     if (receiveCallback_) {
         receiveCallback_(data, length);
     }
+}
+
+bool BLEConnection::enqueueIncomingMidi(const uint8_t* data, size_t length)
+{
+    if (data == nullptr || length == 0 || length > sizeof(incomingQueue_[0].data)) {
+        return false;
+    }
+
+    portENTER_CRITICAL(&incomingMux_);
+    const uint8_t next = (incomingHead_ + 1) % kIncomingQueueDepth;
+    if (next == incomingTail_) {
+        portEXIT_CRITICAL(&incomingMux_);
+        return false;
+    }
+
+    RawBleMessage& message = incomingQueue_[incomingHead_];
+    memcpy(message.data, data, length);
+    message.length = length;
+    incomingHead_ = next;
+    portEXIT_CRITICAL(&incomingMux_);
+    return true;
+}
+
+bool BLEConnection::dequeueIncomingMidi(RawBleMessage& message)
+{
+    portENTER_CRITICAL(&incomingMux_);
+    if (incomingTail_ == incomingHead_) {
+        portEXIT_CRITICAL(&incomingMux_);
+        return false;
+    }
+
+    message = incomingQueue_[incomingTail_];
+    incomingTail_ = (incomingTail_ + 1) % kIncomingQueueDepth;
+    portEXIT_CRITICAL(&incomingMux_);
+    return true;
+}
+
+void BLEConnection::dispatchIncomingMidi(const uint8_t* data, size_t length)
+{
+    if (midiCallback) {
+        midiCallback(data, length);
+    }
+    onMidiDataReceived(data, length);
 }

@@ -270,18 +270,6 @@ void USBConnection::_usbTask(void* arg)
 
         usb_host_client_handle_events(usbCon->clientHandle, pdMS_TO_TICKS(1));
 
-        if (usbCon->isReady) {
-            const unsigned long now = millis();
-            if ((now - usbCon->lastCheck) > usbCon->interval) {
-                usbCon->lastCheck = now;
-                for (int i = 0; i < kNumMidiInTransfers; i++) {
-                    if (usbCon->midiInTransfers[i] != nullptr) {
-                        usb_host_transfer_submit(usbCon->midiInTransfers[i]);
-                    }
-                }
-            }
-        }
-
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
@@ -471,9 +459,7 @@ bool USBConnection::_isMidiInterface(const usb_intf_desc_t* intf) const
     const bool isLegacyAudio = (intf->bInterfaceClass == USB_CLASS_AUDIO &&
                                 intf->bInterfaceSubClass == 0x00 &&
                                 intf->bNumEndpoints > 0);
-    const bool isVendorMidi = (intf->bInterfaceClass == 0xFF &&
-                               intf->bNumEndpoints >= 1);
-    return isStandardMidi || isLegacyAudio || isVendorMidi;
+    return isStandardMidi || isLegacyAudio;
 }
 
 bool USBConnection::_claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf,
@@ -483,10 +469,6 @@ bool USBConnection::_claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf
 {
     if (intf == nullptr || isReady || config == nullptr) {
         return false;
-    }
-
-    if (intf->bInterfaceClass == 0xFF) {
-        BRIDGE_LOG_LN("[USB] Warning: Device is in VENDOR mode (Class 0xFF). Roland pianos MUST be in 'Generic' mode for this bridge.");
     }
 
     BRIDGE_LOG("[USB] Claiming interface %d alt %d (%d endpoints)...\n",
@@ -526,6 +508,17 @@ bool USBConnection::_claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf
 
     if (midiInTransfers[0] == nullptr) {
         usb_host_interface_release(clientHandle, deviceHandle, intf->bInterfaceNumber);
+        for (int i = 0; i < kNumMidiInTransfers; i++) {
+            if (midiInTransfers[i] != nullptr) {
+                usb_host_transfer_free(midiInTransfers[i]);
+                midiInTransfers[i] = nullptr;
+            }
+        }
+        if (outTransfer != nullptr) {
+            usb_host_transfer_free(outTransfer);
+            outTransfer = nullptr;
+            outTransferBusy = false;
+        }
         return false;
     }
 
@@ -544,6 +537,7 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
     const uint16_t totalLength = config_desc->wTotalLength;
     uint16_t index = 0;
     bool claimedOk = false;
+    bool vendorModeSeen = false;
 
     BRIDGE_LOG("[USB] Scanning %d bytes of descriptors...\n", totalLength);
 
@@ -564,6 +558,12 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
             BRIDGE_LOG("[USB] Found Interface %d alt %d: Class 0x%02X, SubClass 0x%02X, Endpoints %d\n",
                        intf->bInterfaceNumber, intf->bAlternateSetting,
                        intf->bInterfaceClass, intf->bInterfaceSubClass, intf->bNumEndpoints);
+
+            if (intf->bInterfaceClass == 0xFF && intf->bNumEndpoints > 0) {
+                vendorModeSeen = true;
+                lastError = "Roland USB Driver must be Generic";
+                BRIDGE_LOG_LN("[USB] Vendor-class interface seen. For Roland, set USB Driver to Generic.");
+            }
 
             if (!isReady && _isMidiInterface(intf)) {
                 if (_claimInterfaceAndSetupEndpoints(intf, p, totalLength, index + len)) {
@@ -589,7 +589,7 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
         return;
     }
 
-    if (!claimedOk) {
+    if (!claimedOk && !vendorModeSeen) {
         claimedOk = _tryEndpointFallback();
     }
 
@@ -632,6 +632,7 @@ void USBConnection::_setupMidiInEndpoint(const usb_ep_desc_t* endpoint)
 
         BRIDGE_LOG("[USB]   MIDI IN allocated on 0x%02X (pipe %d)\n",
                    endpoint->bEndpointAddress, i);
+        return;
     }
 }
 

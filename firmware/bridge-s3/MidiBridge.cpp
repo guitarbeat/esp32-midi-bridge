@@ -3,10 +3,14 @@
 #include "MidiCodec.h"
 #include "MidiEngine.h"
 
+#ifdef ARDUINO
+#include "BridgeUi.h"
+#else
 class BridgeUi {
 public:
     void notifyStatus(const char* text, uint16_t color);
 };
+#endif
 
 MidiBridge midiBridge;
 

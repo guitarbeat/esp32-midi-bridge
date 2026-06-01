@@ -50,6 +50,8 @@ public:
     virtual void onMidiDataReceived(const uint8_t* data, size_t length);
 
 protected:
+    static constexpr uint8_t kIncomingQueueDepth = 16;
+
     BLEServer* pServer;
     BLECharacteristic* pCharacteristic;
     BLECharacteristicCallbacks* pBleCallback;
@@ -57,6 +59,14 @@ protected:
     SemaphoreHandle_t sendMutex;
     MIDIMessageCallback midiCallback;
     uint16_t avgLatencyMs_;
+    RawBleMessage incomingQueue_[kIncomingQueueDepth];
+    volatile uint8_t incomingHead_;
+    volatile uint8_t incomingTail_;
+    portMUX_TYPE incomingMux_;
+
+    bool enqueueIncomingMidi(const uint8_t* data, size_t length);
+    bool dequeueIncomingMidi(RawBleMessage& message);
+    void dispatchIncomingMidi(const uint8_t* data, size_t length);
 };
 
 #endif // BLE_CONNECTION_H

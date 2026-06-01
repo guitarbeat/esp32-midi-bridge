@@ -8,9 +8,58 @@
 
 BridgeUi bridgeUi;
 
+namespace {
+
+constexpr uint8_t kKeyboardVisibleNotes = 24;
+constexpr uint8_t kDefaultFirstNote = 48;  // C3
+constexpr int16_t kFullKeyboardY = 178;
+constexpr uint16_t kPanelBorder = RGB565(40, 40, 50);
+constexpr uint16_t kPanelFill = RGB565(10, 10, 15);
+constexpr uint16_t kMutedText = RGB565(100, 100, 120);
+
+bool isBlackKey(uint8_t note)
+{
+    switch (note % 12) {
+        case 1:
+        case 3:
+        case 6:
+        case 8:
+        case 10:
+            return true;
+        default:
+            return false;
+    }
+}
+
+const char* displayModeName(BridgeUi::DisplayMode mode)
+{
+    switch (mode) {
+        case BridgeUi::DisplayMode::kFull: return "FULL";
+        case BridgeUi::DisplayMode::kPerformance: return "PERF";
+        case BridgeUi::DisplayMode::kMinimal: return "MIN";
+        case BridgeUi::DisplayMode::kStage: return "STAGE";
+        default: return "FULL";
+    }
+}
+
+uint8_t clampKeyboardFirstNote(int firstNote)
+{
+    if (firstNote < 0) {
+        return 0;
+    }
+    constexpr int kMaxFirst = 128 - kKeyboardVisibleNotes;
+    if (firstNote > kMaxFirst) {
+        return kMaxFirst;
+    }
+    return static_cast<uint8_t>(firstNote);
+}
+
+}  // namespace
+
 void BridgeUi::begin(Arduino_GFX* gfx_ptr)
 {
     gfx = gfx_ptr;
+    keyboardFirstNote_ = kDefaultFirstNote;
 }
 
 void BridgeUi::refresh(uint32_t nowMs, bool force)
@@ -20,12 +69,24 @@ void BridgeUi::refresh(uint32_t nowMs, bool force)
     lastRefreshMs_ = nowMs;
 
     gfx->fillScreen(RGB565_BLACK);
+    updateKeyboardViewport();
 
     drawHeader(nowMs);
-    drawStatusRow(nowMs);
-    drawStatsRow();
-    drawConsole(nowMs);
-    drawKeyboardBar();
+    switch (displayMode_) {
+        case DisplayMode::kPerformance:
+            drawPerformanceMode();
+            break;
+        case DisplayMode::kMinimal:
+            drawMinimalMode();
+            break;
+        case DisplayMode::kStage:
+            drawStageMode();
+            break;
+        case DisplayMode::kFull:
+        default:
+            drawFullMode(nowMs);
+            break;
+    }
     drawToast(nowMs);
 }
 
@@ -45,7 +106,82 @@ void BridgeUi::cycleDisplayMode()
 {
     displayMode_ = static_cast<DisplayMode>((static_cast<uint8_t>(displayMode_) + 1) % static_cast<uint8_t>(DisplayMode::kModeCount));
     bridgeSystem.saveDisplayMode(static_cast<uint8_t>(displayMode_));
-    showToast(displayMode_ == DisplayMode::kFull ? "FULL" : "PERF", millis());
+    showToast(displayModeName(displayMode_), millis());
+}
+
+void BridgeUi::drawFullMode(uint32_t nowMs)
+{
+    drawStatusRow(nowMs);
+    drawStatsRow();
+    drawConsole(nowMs, 3);
+    drawPerformanceSummary(160);
+    drawMiniKeyboard(8, kFullKeyboardY, 224, 54, keyboardFirstNote(), kKeyboardVisibleNotes);
+}
+
+void BridgeUi::drawPerformanceMode()
+{
+    const auto& me = bridgeSystem.engine().state();
+
+    drawPerformanceSummary(36);
+    gfx->setTextSize(3);
+    gfx->setTextColor(RGB565_WHITE);
+    gfx->setCursor(20, 58);
+    gfx->printf("%s", me.lastNoteLabel);
+
+    gfx->setTextSize(1);
+    gfx->setTextColor(RGB565_LIGHTGRAY);
+    gfx->setCursor(118, 64);
+    gfx->printf("VEL %u", me.lastVelocity);
+    gfx->setCursor(118, 78);
+    gfx->printf("NPM %u", me.notesPerMinute);
+    gfx->setCursor(118, 92);
+    gfx->printf("IN %lu OUT %lu", diagnostics_.usbIn, diagnostics_.bleOut);
+
+    drawMiniKeyboard(8, 116, 224, 108, keyboardFirstNote(), kKeyboardVisibleNotes);
+}
+
+void BridgeUi::drawMinimalMode()
+{
+    const auto& me = bridgeSystem.engine().state();
+    const bool usbReady = diagnostics_.usb != nullptr && diagnostics_.usb->isConnected();
+    const bool bleLinked = diagnostics_.ble != nullptr && diagnostics_.ble->isConnected();
+
+    gfx->setTextSize(1);
+    gfx->setTextColor(usbReady ? RGB565_LIME : RGB565_ORANGE);
+    gfx->setCursor(20, 48);
+    gfx->printf("USB %s", usbReady ? "READY" : "WAIT");
+    gfx->setTextColor(bleLinked ? RGB565_CYAN : RGB565_ORANGE);
+    gfx->setCursor(132, 48);
+    gfx->printf("BLE %s", bleLinked ? "LINKED" : "ADV");
+
+    gfx->setTextColor(RGB565_WHITE);
+    gfx->setTextSize(4);
+    gfx->setCursor(70, 86);
+    gfx->printf("%s", me.lastNoteLabel);
+
+    gfx->setTextSize(1);
+    gfx->setTextColor(RGB565_LIGHTGRAY);
+    gfx->setCursor(50, 136);
+    gfx->printf("VEL %u   HELD %u", me.lastVelocity, me.heldCount);
+
+    drawMiniKeyboard(18, 168, 204, 56, keyboardFirstNote(), kKeyboardVisibleNotes);
+}
+
+void BridgeUi::drawStageMode()
+{
+    const auto& me = bridgeSystem.engine().state();
+
+    gfx->setTextSize(5);
+    gfx->setTextColor(RGB565_WHITE);
+    gfx->setCursor(48, 48);
+    gfx->printf("%s", me.lastNoteLabel);
+
+    gfx->setTextSize(1);
+    gfx->setTextColor(me.sustainDown ? RGB565_GOLD : kMutedText);
+    gfx->setCursor(78, 102);
+    gfx->printf("VEL %u  %s", me.lastVelocity, me.sustainDown ? "SUSTAIN" : "DRY");
+
+    drawMiniKeyboard(6, 124, 228, 106, keyboardFirstNote(), kKeyboardVisibleNotes);
 }
 
 void BridgeUi::drawHeader(uint32_t nowMs)
@@ -79,8 +215,8 @@ void BridgeUi::drawStatusRow(uint32_t nowMs)
     (void)nowMs;
 
     auto drawChip = [&](int16_t x, int16_t y, const char* label, bool ok, const char* okText, const char* waitText, uint16_t okColor) {
-        gfx->drawRoundRect(x, y, 108, 34, 4, RGB565(40, 40, 50));
-        gfx->setTextColor(RGB565(100, 100, 120));
+        gfx->drawRoundRect(x, y, 108, 34, 4, kPanelBorder);
+        gfx->setTextColor(kMutedText);
         gfx->setTextSize(1);
         gfx->setCursor(x + 6, y + 4);
         gfx->print(label);
@@ -98,7 +234,7 @@ void BridgeUi::drawStatusRow(uint32_t nowMs)
 
 void BridgeUi::drawStatsRow()
 {
-    gfx->drawRoundRect(8, 72, 224, 28, 4, RGB565(40, 40, 50));
+    gfx->drawRoundRect(8, 72, 224, 28, 4, kPanelBorder);
     gfx->setTextSize(1);
     gfx->setTextColor(RGB565_LIGHTGRAY);
     gfx->setCursor(14, 78);
@@ -111,7 +247,7 @@ void BridgeUi::drawStatsRow()
     if (diagnostics_.usb != nullptr && diagnostics_.usb->isConnected()) {
         const String& name = diagnostics_.usb->getDeviceName();
         if (name.length() > 0) {
-            gfx->setTextColor(RGB565(100, 100, 120));
+            gfx->setTextColor(kMutedText);
             gfx->setCursor(130, 90);
             gfx->printf("%.12s", name.c_str());
         }
@@ -125,38 +261,127 @@ void BridgeUi::drawStatsRow()
     }
 }
 
-void BridgeUi::drawConsole(uint32_t nowMs)
+void BridgeUi::drawConsole(uint32_t nowMs, uint8_t maxLines)
 {
     (void)nowMs;
     const int16_t logY = 106;
-    gfx->setTextColor(RGB565(100, 100, 120));
+    gfx->setTextColor(kMutedText);
     gfx->setTextSize(1);
     gfx->setCursor(10, logY);
     gfx->print("MIDI LOG");
-    gfx->fillRect(10, logY + 10, 220, 78, RGB565(10, 10, 15));
-    gfx->drawRect(10, logY + 10, 220, 78, RGB565(30, 30, 40));
+    gfx->fillRect(10, logY + 10, 220, 42, kPanelFill);
+    gfx->drawRect(10, logY + 10, 220, 42, RGB565(30, 30, 40));
 
-    for (uint8_t i = 0; i < logCount_; i++) {
-        const auto* e = &logs_[(logHead_ - logCount_ + i + kMaxLogEntries) % kMaxLogEntries];
+    const uint8_t lines = logCount_ < maxLines ? logCount_ : maxLines;
+    for (uint8_t i = 0; i < lines; i++) {
+        const auto* e = &logs_[(logHead_ - lines + i + kMaxLogEntries) % kMaxLogEntries];
         gfx->setTextColor(e->color);
         gfx->setCursor(16, logY + 16 + static_cast<int16_t>(i) * 14);
         gfx->printf("> %s", e->text);
     }
 }
 
-void BridgeUi::drawKeyboardBar()
+void BridgeUi::drawPerformanceSummary(int16_t y)
 {
     const auto& me = bridgeSystem.engine().state();
-    const int16_t y = 232;
-    const int16_t startX = 10;
-    gfx->drawRect(startX - 1, y - 1, 130, 10, RGB565(40, 40, 50));
-    for (int i = 0; i < 128; i++) {
-        if (me.heldNotes[i]) {
-            gfx->drawFastVLine(startX + i, y, 8, RGB565_LIME);
-        } else if (i % 12 == 0) {
-            gfx->drawFastVLine(startX + i, y, 8, RGB565(30, 30, 40));
+    gfx->setTextSize(1);
+    gfx->setTextColor(RGB565_LIGHTGRAY);
+    gfx->setCursor(10, y);
+    gfx->printf("Last %s  Vel %u  Held %u  Sus %s",
+                me.lastNoteLabel,
+                me.lastVelocity,
+                me.heldCount,
+                me.sustainDown ? "ON" : "OFF");
+}
+
+void BridgeUi::drawMiniKeyboard(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t firstNote, uint8_t noteCount)
+{
+    if (noteCount > kKeyboardVisibleNotes) {
+        noteCount = kKeyboardVisibleNotes;
+    }
+    const auto& me = bridgeSystem.engine().state();
+    const int16_t labelH = 10;
+    const int16_t keyH = h - labelH;
+    const int16_t blackH = (keyH * 3) / 5;
+
+    gfx->fillRect(x, y, w, h, RGB565_BLACK);
+    gfx->drawRect(x, y, w, keyH, kPanelBorder);
+
+    uint8_t whiteCount = 0;
+    for (uint8_t i = 0; i < noteCount; i++) {
+        if (!isBlackKey(firstNote + i)) {
+            whiteCount++;
         }
     }
+    if (whiteCount == 0) return;
+
+    const int16_t whiteW = (w / whiteCount) > 1 ? (w / whiteCount) : 1;
+    uint8_t whiteIndex = 0;
+    int16_t noteLeft[24] = {0};
+    int16_t noteRight[24] = {0};
+
+    for (uint8_t i = 0; i < noteCount; i++) {
+        const uint8_t note = firstNote + i;
+        if (isBlackKey(note)) continue;
+
+        const int16_t keyX = x + (whiteIndex * w) / whiteCount;
+        const int16_t nextX = x + ((whiteIndex + 1) * w) / whiteCount;
+        const bool held = me.heldNotes[note];
+        const int16_t fillW = (nextX - keyX - 1) > 1 ? (nextX - keyX - 1) : 1;
+        const int16_t outlineW = (nextX - keyX) > 1 ? (nextX - keyX) : 1;
+        gfx->fillRect(keyX + 1, y + 1, fillW, keyH - 2, held ? RGB565_LIME : RGB565(220, 220, 210));
+        gfx->drawRect(keyX, y, outlineW, keyH, RGB565(70, 70, 75));
+
+        noteLeft[i] = keyX;
+        noteRight[i] = nextX;
+
+        if (note % 12 == 0) {
+            gfx->setTextSize(1);
+            gfx->setTextColor(kMutedText);
+            gfx->setCursor(keyX + 1, y + keyH + 2);
+            gfx->printf("C%d", (note / 12) - 1);
+        }
+
+        whiteIndex++;
+    }
+
+    for (uint8_t i = 0; i < noteCount; i++) {
+        const uint8_t note = firstNote + i;
+        if (!isBlackKey(note)) continue;
+
+        int8_t leftWhite = static_cast<int8_t>(i) - 1;
+        while (leftWhite >= 0 && isBlackKey(firstNote + leftWhite)) {
+            leftWhite--;
+        }
+        if (leftWhite < 0) continue;
+
+        const int16_t anchorX = noteRight[leftWhite];
+        const int16_t blackW = (whiteW / 2) > 4 ? (whiteW / 2) : 4;
+        const int16_t keyX = anchorX - (blackW / 2);
+        const bool held = me.heldNotes[note];
+        gfx->fillRect(keyX, y + 1, blackW, blackH, held ? RGB565_CYAN : RGB565(18, 18, 24));
+        gfx->drawRect(keyX, y + 1, blackW, blackH, RGB565(80, 80, 95));
+    }
+}
+
+void BridgeUi::updateKeyboardViewport()
+{
+    const auto& me = bridgeSystem.engine().state();
+    if (me.noteEventsSeen == 0) {
+        keyboardFirstNote_ = kDefaultFirstNote;
+        return;
+    }
+
+    const uint8_t lastNote = me.lastNote;
+    if (lastNote >= keyboardFirstNote_ && lastNote < keyboardFirstNote_ + kKeyboardVisibleNotes) {
+        return;
+    }
+
+    int first = (static_cast<int>(lastNote) / 12 - 1) * 12;
+    if (first < 0) {
+        first = 0;
+    }
+    keyboardFirstNote_ = clampKeyboardFirstNote(first);
 }
 
 void BridgeUi::showToast(const char* text, uint32_t nowMs)

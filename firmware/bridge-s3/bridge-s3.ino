@@ -53,6 +53,7 @@ void setup()
         Serial.printf("[SYSTEM] Canvas framebuffer OK (%u bytes free heap)\n", ESP.getFreeHeap());
         Serial.flush();
         bridgeUi.begin(canvas);
+        bridgeUi.setDisplayMode(static_cast<BridgeUi::DisplayMode>(bridgeSystem.settings().displayModeIndex()));
         bridgeUi.setBoard(board);
         board->setBacklight(255);
         bridgeUi.refresh(millis(), true);
