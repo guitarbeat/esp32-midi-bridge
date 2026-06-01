@@ -112,12 +112,34 @@ void testDecodeUsbEventToRaw() {
     std::cout << "testDecodeUsbEventToRaw passed!" << std::endl;
 }
 
+void testFormatLogLine() {
+    char line[32] = {0};
+
+    const uint8_t programChange[] = {0xC2, 12};
+    assert(MidiCodec::formatLogLine(programChange, sizeof(programChange), line, sizeof(line)));
+    assert(std::string(line) == "PC ch3 #12");
+
+    const uint8_t channelPressure[] = {0xD0, 64};
+    assert(MidiCodec::formatLogLine(channelPressure, sizeof(channelPressure), line, sizeof(line)));
+    assert(std::string(line) == "AT ch1 v64");
+
+    const uint8_t pitchBendCenter[] = {0xE0, 0x00, 0x40};
+    assert(MidiCodec::formatLogLine(pitchBendCenter, sizeof(pitchBendCenter), line, sizeof(line)));
+    assert(std::string(line) == "BEND ch1 0");
+
+    const uint8_t pitchBendDown[] = {0xE4, 0x00, 0x00};
+    assert(MidiCodec::formatLogLine(pitchBendDown, sizeof(pitchBendDown), line, sizeof(line)));
+    assert(std::string(line) == "BEND ch5 -8192");
+
+    std::cout << "testFormatLogLine passed!" << std::endl;
+}
+
 int main() {
     testLengthFromStatus();
     testNoteName();
     testParser();
     testDecodeUsbEventToRaw();
+    testFormatLogLine();
     std::cout << "All tests passed!" << std::endl;
     return 0;
 }
-

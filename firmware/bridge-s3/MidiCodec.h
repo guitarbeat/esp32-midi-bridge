@@ -341,6 +341,13 @@ inline bool formatLogLine(const uint8_t* data, size_t length, char* logLine, siz
         snprintf(logLine, logLineLength, "OFF %s", noteBuffer);
     } else if (messageType == 0xB0 && length >= 3) {
         snprintf(logLine, logLineLength, "CC %u=%u", data[1], data[2]);
+    } else if (messageType == 0xC0 && length >= 2) {
+        snprintf(logLine, logLineLength, "PC ch%u #%u", (status & 0x0F) + 1, data[1]);
+    } else if (messageType == 0xD0 && length >= 2) {
+        snprintf(logLine, logLineLength, "AT ch%u v%u", (status & 0x0F) + 1, data[1]);
+    } else if (messageType == 0xE0 && length >= 3) {
+        const int bend = (static_cast<int>(data[2]) << 7) | data[1];
+        snprintf(logLine, logLineLength, "BEND ch%u %d", (status & 0x0F) + 1, bend - 8192);
     } else {
         snprintf(logLine, logLineLength, "%s", statusName(status));
     }
@@ -350,4 +357,3 @@ inline bool formatLogLine(const uint8_t* data, size_t length, char* logLine, siz
 }  // namespace MidiCodec
 
 #endif
-
