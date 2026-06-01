@@ -34,6 +34,7 @@ public:
     // Transport implementation
     const char* name() const override { return "BLE-MIDI"; }
     bool isConnected() const override;
+    bool isPrimaryOutbound() const override { return true; }
     bool sendMidi(const uint8_t* data, size_t length) override;
 
     uint16_t getAverageLatencyMs() const { return avgLatencyMs_; }
@@ -51,7 +52,8 @@ public:
 protected:
     BLEServer* pServer;
     BLECharacteristic* pCharacteristic;
-    BLECharacteristicCallbacks* pBleCallback;  // Managed to prevent memory leak
+    BLECharacteristicCallbacks* pBleCallback;
+    BLEServerCallbacks* pServerCallback;
     SemaphoreHandle_t sendMutex;
     MIDIMessageCallback midiCallback;
     uint16_t avgLatencyMs_;

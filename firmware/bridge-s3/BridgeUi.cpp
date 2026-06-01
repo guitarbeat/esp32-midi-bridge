@@ -1,9 +1,10 @@
 #include "BridgeUi.h"
 
+#include "BLEConnection.h"
 #include "Board.h"
 #include "BridgeSystem.h"
 #include "MidiCodec.h"
-#include "animation/BongoCat.h"
+#include "USBConnection.h"
 
 BridgeUi bridgeUi;
 
@@ -21,43 +22,11 @@ void BridgeUi::refresh(uint32_t nowMs, bool force)
     gfx->fillScreen(RGB565_BLACK);
 
     drawHeader(nowMs);
-    drawCards(nowMs);
+    drawStatusRow(nowMs);
+    drawStatsRow();
     drawConsole(nowMs);
-
-    // Bongo Cat (Centered)
-    if (bongoCat_) {
-        const auto& me = bridgeSystem.engine().state();
-        const bool active = lastMidiMs_ > 0 && nowMs - lastMidiMs_ < 400;
-        bongoCat_->update(nowMs, active, me.noteEventsSeen);
-        bongoCat_->draw(gfx, (240 - 128) / 2); 
-    }
-
     drawKeyboardBar();
     drawToast(nowMs);
-}
-
-void BridgeUi::notifyMidiEvent(const uint8_t* data)
-{
-    const uint8_t status = data[1];
-    const uint8_t messageType = status & 0xF0;
-    const uint8_t data1 = data[2];
-    const uint8_t data2 = data[3];
-    char noteBuffer[12] = {0};
-    char logLine[32] = {0};
-
-    if (messageType == 0x90 || messageType == 0x80) {
-        const bool noteOn = (messageType == 0x90 && data2 > 0);
-        MidiCodec::noteName(data1, noteBuffer, sizeof(noteBuffer));
-        snprintf(logLine, sizeof(logLine), "%-3s %s (v%u)", noteOn ? "ON" : "OFF", noteBuffer, data2);
-        notifyStatus(logLine, noteOn ? RGB565_LIME : RGB565_DARKGRAY);
-    } else if (messageType == 0xB0) {
-        snprintf(logLine, sizeof(logLine), "CC %u=%u", data1, data2);
-        notifyStatus(logLine, RGB565_GOLD);
-    } else {
-        notifyStatus(MidiCodec::statusName(status), RGB565_LIGHTGRAY);
-    }
-    
-    lastMidiMs_ = millis();
 }
 
 void BridgeUi::notifyStatus(const char* text, uint16_t color)
@@ -82,53 +51,95 @@ void BridgeUi::cycleDisplayMode()
 void BridgeUi::drawHeader(uint32_t nowMs)
 {
     constexpr uint16_t kHeaderColor = RGB565(20, 20, 30);
-    gfx->fillRect(0, 0, 240, 32, kHeaderColor);
-    gfx->drawFastHLine(0, 32, 240, RGB565(60, 60, 80));
+    gfx->fillRect(0, 0, 240, 28, kHeaderColor);
+    gfx->drawFastHLine(0, 28, 240, RGB565(60, 60, 80));
 
     gfx->setTextSize(1);
-    
-    // Heartbeat
-    const uint16_t pulseColor = (nowMs / 1000) % 2 == 0 ? RGB565_CYAN : RGB565(0, 40, 60);
-    gfx->fillRect(10, 12, 4, 8, pulseColor);
 
-    // System tray info (Placeholder for real status from System)
+    const uint16_t pulseColor = (nowMs / 1000) % 2 == 0 ? RGB565_CYAN : RGB565(0, 40, 60);
+    gfx->fillRect(8, 10, 4, 8, pulseColor);
+
     gfx->setTextColor(RGB565_LIGHTGRAY);
-    gfx->setCursor(25, 11);
-    gfx->print("PIANO BRIDGE v2.1");
+    gfx->setCursor(18, 10);
+    gfx->print("PIANO BRIDGE");
+
+    gfx->setTextColor(RGB565(120, 120, 140));
+    gfx->setCursor(150, 10);
+    gfx->printf("%lus", nowMs / 1000);
 
     if (board_) {
         const float v = board_->getBatteryVoltage();
-        gfx->setCursor(180, 11);
+        gfx->setCursor(200, 10);
         gfx->printf("%.1fV", v);
     }
 }
 
-void BridgeUi::drawCards(uint32_t nowMs)
+void BridgeUi::drawStatusRow(uint32_t nowMs)
 {
-    auto drawCard = [&](int16_t x, int16_t y, int16_t w, int16_t h, const char* label, const char* value, uint16_t color) {
-        gfx->drawRoundRect(x, y, w, h, 6, RGB565(40, 40, 50));
+    (void)nowMs;
+
+    auto drawChip = [&](int16_t x, int16_t y, const char* label, bool ok, const char* okText, const char* waitText, uint16_t okColor) {
+        gfx->drawRoundRect(x, y, 108, 34, 4, RGB565(40, 40, 50));
         gfx->setTextColor(RGB565(100, 100, 120));
-        gfx->setCursor(x + 8, y + 6); gfx->print(label);
-        gfx->setTextColor(color); gfx->setTextSize(2);
-        gfx->setCursor(x + 8, y + 18); gfx->print(value);
         gfx->setTextSize(1);
+        gfx->setCursor(x + 6, y + 4);
+        gfx->print(label);
+        gfx->setTextColor(ok ? okColor : RGB565_ORANGE);
+        gfx->setCursor(x + 6, y + 17);
+        gfx->print(ok ? okText : waitText);
     };
 
-    drawCard(10, 42, 115, 44, "TRANSPOSE", bridgeSystem.transposeString(), RGB565_GOLD);
-    drawCard(130, 42, 100, 44, "CHANNEL", bridgeSystem.channelString(), RGB565_CYAN);
+    const bool usbReady = diagnostics_.usb != nullptr && diagnostics_.usb->isConnected();
+    const bool bleLinked = diagnostics_.ble != nullptr && diagnostics_.ble->isConnected();
+
+    drawChip(8, 34, "USB HOST", usbReady, "READY", "WAIT", RGB565_LIME);
+    drawChip(124, 34, "BLE OUT", bleLinked, "LINKED", "ADV...", RGB565_CYAN);
+}
+
+void BridgeUi::drawStatsRow()
+{
+    gfx->drawRoundRect(8, 72, 224, 28, 4, RGB565(40, 40, 50));
+    gfx->setTextSize(1);
+    gfx->setTextColor(RGB565_LIGHTGRAY);
+    gfx->setCursor(14, 78);
+    gfx->printf("IN %lu  OUT %lu  SKIP %lu", diagnostics_.usbIn, diagnostics_.bleOut, diagnostics_.bleSkip);
+
+    gfx->setTextColor(RGB565_GOLD);
+    gfx->setCursor(14, 90);
+    gfx->printf("TR %s  %s", bridgeSystem.transposeString(), bridgeSystem.channelString());
+
+    if (diagnostics_.usb != nullptr && diagnostics_.usb->isConnected()) {
+        const String& name = diagnostics_.usb->getDeviceName();
+        if (name.length() > 0) {
+            gfx->setTextColor(RGB565(100, 100, 120));
+            gfx->setCursor(130, 90);
+            gfx->printf("%.12s", name.c_str());
+        }
+    } else if (diagnostics_.usb != nullptr) {
+        const String& err = diagnostics_.usb->getLastError();
+        if (err.length() > 0) {
+            gfx->setTextColor(RGB565_ORANGE);
+            gfx->setCursor(100, 90);
+            gfx->printf("%.18s", err.c_str());
+        }
+    }
 }
 
 void BridgeUi::drawConsole(uint32_t nowMs)
 {
-    const int16_t logY = 96;
+    (void)nowMs;
+    const int16_t logY = 106;
     gfx->setTextColor(RGB565(100, 100, 120));
-    gfx->setCursor(10, logY); gfx->print("LIVE MONITOR");
-    gfx->fillRect(10, logY + 12, 220, 54, RGB565(10, 10, 15));
-    gfx->drawRect(10, logY + 12, 220, 54, RGB565(30, 30, 40));
+    gfx->setTextSize(1);
+    gfx->setCursor(10, logY);
+    gfx->print("MIDI LOG");
+    gfx->fillRect(10, logY + 10, 220, 78, RGB565(10, 10, 15));
+    gfx->drawRect(10, logY + 10, 220, 78, RGB565(30, 30, 40));
 
     for (uint8_t i = 0; i < logCount_; i++) {
         const auto* e = &logs_[(logHead_ - logCount_ + i + kMaxLogEntries) % kMaxLogEntries];
-        gfx->setTextColor(e->color); gfx->setCursor(18, logY + 18 + (i * 11));
+        gfx->setTextColor(e->color);
+        gfx->setCursor(16, logY + 16 + static_cast<int16_t>(i) * 14);
         gfx->printf("> %s", e->text);
     }
 }
@@ -136,11 +147,15 @@ void BridgeUi::drawConsole(uint32_t nowMs)
 void BridgeUi::drawKeyboardBar()
 {
     const auto& me = bridgeSystem.engine().state();
-    const int16_t y = 232, startX = 10;
+    const int16_t y = 232;
+    const int16_t startX = 10;
     gfx->drawRect(startX - 1, y - 1, 130, 10, RGB565(40, 40, 50));
     for (int i = 0; i < 128; i++) {
-        if (me.heldNotes[i]) gfx->drawFastVLine(startX + i, y, 8, RGB565_LIME);
-        else if (i % 12 == 0) gfx->drawFastVLine(startX + i, y, 8, RGB565(30, 30, 40));
+        if (me.heldNotes[i]) {
+            gfx->drawFastVLine(startX + i, y, 8, RGB565_LIME);
+        } else if (i % 12 == 0) {
+            gfx->drawFastVLine(startX + i, y, 8, RGB565(30, 30, 40));
+        }
     }
 }
 
@@ -153,8 +168,9 @@ void BridgeUi::showToast(const char* text, uint32_t nowMs)
 void BridgeUi::drawToast(uint32_t nowMs)
 {
     if (nowMs < toastUntilMs_) {
-        gfx->fillRoundRect(70, 180, 100, 24, 4, RGB565(30, 30, 60));
+        gfx->fillRoundRect(70, 196, 100, 24, 4, RGB565(30, 30, 60));
         gfx->setTextColor(RGB565_WHITE);
-        gfx->setCursor(80, 188); gfx->print(toastText_);
+        gfx->setCursor(80, 204);
+        gfx->print(toastText_);
     }
 }

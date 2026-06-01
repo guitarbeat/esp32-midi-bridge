@@ -31,6 +31,12 @@ public:
     /** @brief Optional periodic processing. */
     virtual void task() {}
 
+    /** @brief True for the transport that feeds the bridge (USB host). Drives inbound counters. */
+    virtual bool isPrimaryInbound() const { return false; }
+
+    /** @brief True for the main outbound target (BLE). Drives outbound counters and route log. */
+    virtual bool isPrimaryOutbound() const { return false; }
+
 protected:
     MidiReceiveCallback receiveCallback_ = nullptr;
 };

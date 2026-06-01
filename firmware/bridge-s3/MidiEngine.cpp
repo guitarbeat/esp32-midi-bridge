@@ -1,40 +1,48 @@
 #include "MidiEngine.h"
 #include "MidiCodec.h"
 
-MidiEngine midiEngine;
-
 MidiEngine::MidiEngine()
 {
     memset(&state_, 0, sizeof(state_));
     strcpy(state_.lastNoteLabel, "--");
 }
 
-bool MidiEngine::processPacket(uint8_t* packet, size_t length)
+bool MidiEngine::prepareOutbound(uint8_t* packet, size_t length)
 {
-    if (packet == nullptr || length < 3) return false;
+    if (packet == nullptr || length < 1) {
+        return false;
+    }
 
-    uint8_t status = packet[1];
-    uint8_t msgType = status & 0xF0;
-    uint8_t channel = (status & 0x0F) + 1;
-    uint8_t* data1 = &packet[2];
-    uint8_t* data2 = &packet[3];
+    const uint8_t status = packet[0];
+    if (!(status & 0x80)) {
+        return false;
+    }
 
-    // 1. Channel Filter
+    const uint8_t expectedLen = MidiCodec::lengthFromStatus(status);
+    if (expectedLen == 0 || length < expectedLen) {
+        return false;
+    }
+
+    const uint8_t msgType = status & 0xF0;
+    const uint8_t channel = (status & 0x0F) + 1;
+
     if (channelFilter_ > 0 && channel != channelFilter_) {
         return false;
     }
 
-    // 2. Note Tracking & Transposition
     if (msgType == 0x90 || msgType == 0x80) {
-        bool noteOn = (msgType == 0x90 && *data2 > 0);
-        uint8_t originalNote = *data1;
-        
-        // Apply Transpose
-        if (transpose_ != 0) {
-            *data1 = clampNote(static_cast<int>(originalNote) + transpose_);
+        if (length < 3) {
+            return false;
         }
 
-        uint8_t note = *data1;
+        const bool noteOn = (msgType == 0x90 && packet[2] > 0);
+        const uint8_t originalNote = packet[1];
+
+        if (transpose_ != 0) {
+            packet[1] = clampNote(static_cast<int>(originalNote) + transpose_);
+        }
+
+        const uint8_t note = packet[1];
 
         if (noteOn) {
             if (!state_.heldNotes[note]) {
@@ -42,20 +50,20 @@ bool MidiEngine::processPacket(uint8_t* packet, size_t length)
                 state_.heldCount++;
             }
             state_.lastNote = note;
-            state_.lastVelocity = *data2;
+            state_.lastVelocity = packet[2];
             state_.noteEventsSeen++;
             noteOnTimes[noteOnHead_ % 32] = millis();
             noteOnHead_++;
             updateNoteLabel();
-        } else {
-            if (state_.heldNotes[note]) {
-                state_.heldNotes[note] = false;
-                if (state_.heldCount > 0) state_.heldCount--;
+        } else if (state_.heldNotes[note]) {
+            state_.heldNotes[note] = false;
+            if (state_.heldCount > 0) {
+                state_.heldCount--;
             }
         }
-    } else if (msgType == 0xB0) { // Control Change
-        if (*data1 == 64) { // Sustain Pedal
-            state_.sustainDown = (*data2 >= 64);
+    } else if (msgType == 0xB0 && length >= 3) {
+        if (packet[1] == 64) {
+            state_.sustainDown = (packet[2] >= 64);
         }
     }
 

@@ -15,4 +15,6 @@ typedef bool boolean;
 #define OUTPUT 0x02
 #define INPUT_PULLUP 0x04
 
+inline unsigned long millis() { return 0; }
+
 #endif

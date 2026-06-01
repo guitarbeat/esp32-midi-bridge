@@ -89,10 +89,34 @@ void testParser() {
     std::cout << "testParser passed!" << std::endl;
 }
 
+void testDecodeUsbEventToRaw() {
+    uint8_t runningStatus[16] = {0};
+    uint8_t raw[4] = {0};
+    size_t rawLen = 0;
+
+    const uint8_t noteOn[] = {0x09, 0x90, 60, 100};
+    assert(MidiCodec::decodeUsbEventToRaw(noteOn, runningStatus, raw, &rawLen));
+    assert(rawLen == 3);
+    assert(raw[0] == 0x90 && raw[1] == 60 && raw[2] == 100);
+
+    const uint8_t noteOnRs[] = {0x09, 0x00, 61, 90};
+    assert(MidiCodec::decodeUsbEventToRaw(noteOnRs, runningStatus, raw, &rawLen));
+    assert(rawLen == 3);
+    assert(raw[0] == 0x90 && raw[1] == 61 && raw[2] == 90);
+
+    const uint8_t programChange[] = {0x0C, 0xC0, 5, 0};
+    assert(MidiCodec::decodeUsbEventToRaw(programChange, runningStatus, raw, &rawLen));
+    assert(rawLen == 2);
+    assert(raw[0] == 0xC0 && raw[1] == 5);
+
+    std::cout << "testDecodeUsbEventToRaw passed!" << std::endl;
+}
+
 int main() {
     testLengthFromStatus();
     testNoteName();
     testParser();
+    testDecodeUsbEventToRaw();
     std::cout << "All tests passed!" << std::endl;
     return 0;
 }

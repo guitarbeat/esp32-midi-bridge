@@ -1,19 +1,19 @@
 #include "MidiBridge.h"
 
-#include "BridgeSystem.h"
-#include "BridgeUi.h"
 #include "MidiCodec.h"
 #include "MidiEngine.h"
 
-#if ENABLE_RTP_MIDI
-#include "ConnectivityManager.h"
-#endif
+class BridgeUi {
+public:
+    void notifyStatus(const char* text, uint16_t color);
+};
 
 MidiBridge midiBridge;
 
-void MidiBridge::begin(BridgeUi* ui)
+void MidiBridge::begin(BridgeUi* ui, std::function<bool()> isPaused)
 {
     ui_ = ui;
+    isPaused_ = std::move(isPaused);
 }
 
 void MidiBridge::setMidiEngine(MidiEngine* engine)
@@ -23,71 +23,92 @@ void MidiBridge::setMidiEngine(MidiEngine* engine)
 
 void MidiBridge::addTransport(Transport* transport)
 {
-    if (transport == nullptr) return;
+    if (transport == nullptr) {
+        return;
+    }
     transports_.push_back(transport);
     transport->setReceiveCallback([this, transport](const uint8_t* data, size_t length) {
         this->onMidiReceived(transport, data, length);
     });
 }
 
+bool MidiBridge::isPaused() const
+{
+    return isPaused_ && isPaused_();
+}
+
+void MidiBridge::notifyRouteUi(const uint8_t* data, size_t length, uint16_t color)
+{
+    if (ui_ == nullptr || data == nullptr || length < 1) {
+        return;
+    }
+
+    char logLine[32] = {0};
+    if (MidiCodec::formatLogLine(data, length, logLine, sizeof(logLine))) {
+        ui_->notifyStatus(logLine, color);
+    }
+}
+
 MidiBridge::Result MidiBridge::route(Transport* source, const uint8_t* data, size_t length)
 {
-    if (data == nullptr || length < 1) return Result::kIgnored;
+    if (source != nullptr && source->isPrimaryInbound()) {
+        counters_.usbPacketsSeen++;
+    }
+
+    if (data == nullptr || length < 1) {
+        return Result::kIgnored;
+    }
 
     const uint8_t status = data[0];
+    if (status == 0xFE || status == 0xF8) {
+        return Result::kFiltered;
+    }
 
-    // Central Filter: Save bandwidth for BLE and UI by dropping noisy messages
-    // Active Sensing (0xFE) is sent every 300ms by many keyboards
-    if (status == 0xFE) return Result::kFiltered;
-    // Timing Clock (0xF8) is sent 24 times per quarter note (can be 50-100Hz+)
-    // Only forward if we specifically need sync (currently we don't)
-    if (status == 0xF8) return Result::kFiltered;
-
-    // Use a stack buffer for processing to allow transformation
     uint8_t rawMidi[256];
     const size_t processLen = length > sizeof(rawMidi) ? sizeof(rawMidi) : length;
     memcpy(rawMidi, data, processLen);
 
-    // 1. Live Processing (MidiEngine) - only for channel voice messages
     if (engine_ != nullptr && (status >= 0x80 && status < 0xF0)) {
-        if (!engine_->processPacket(rawMidi, 3)) {
+        if (!engine_->prepareOutbound(rawMidi, processLen)) {
             return Result::kFiltered;
         }
     }
 
-    // 2. UI Notification (Visual feedback)
-    if (ui_ != nullptr) {
-        // UI expects a 4-byte shim for standard messages
-        uint8_t uiPacket[4] = {0, rawMidi[0], rawMidi[1], rawMidi[2]};
-        ui_->notifyMidiEvent(uiPacket);
-    }
-
-    if (bridgeSystem.isPaused()) {
+    if (isPaused()) {
+        notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteSkip);
         return Result::kFiltered;
     }
 
-    // 3. Hardware Routing
+    bool forwardedPrimary = false;
     for (auto* t : transports_) {
-        if (t != source && t->isConnected()) {
-            t->sendMidi(rawMidi, processLen);
-            
-            // Statistics
-            if (strcmp(t->name(), "BLE-MIDI") == 0) {
-                counters_.blePacketsSent++;
+        if (t == source) {
+            continue;
+        }
+
+        if (!t->isConnected()) {
+            if (t->isPrimaryOutbound()) {
+                counters_.blePacketsSkipped++;
+                notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteSkip);
             }
+            continue;
+        }
+
+        if (t->sendMidi(rawMidi, processLen)) {
+            if (t->isPrimaryOutbound()) {
+                counters_.blePacketsSent++;
+                notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteOk);
+                forwardedPrimary = true;
+            }
+        } else if (t->isPrimaryOutbound()) {
+            counters_.blePacketsSkipped++;
+            notifyRouteUi(rawMidi, processLen, BridgeColors::kRouteFail);
         }
     }
 
-    return Result::kForwarded;
+    return forwardedPrimary ? Result::kForwarded : Result::kFiltered;
 }
 
 void MidiBridge::onMidiReceived(Transport* source, const uint8_t* data, size_t length)
 {
-    // Counters
-    if (source && strcmp(source->name(), "USB-HOST") == 0) {
-        counters_.usbPacketsSeen++;
-    }
-    
-    // Route it
     route(source, data, length);
 }

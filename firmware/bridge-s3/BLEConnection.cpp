@@ -73,6 +73,7 @@ BLEConnection::BLEConnection()
     : pServer(nullptr),
       pCharacteristic(nullptr),
       pBleCallback(nullptr),
+      pServerCallback(nullptr),
       sendMutex(nullptr),
       midiCallback(nullptr),
       avgLatencyMs_(0)
@@ -86,6 +87,8 @@ BLEConnection::~BLEConnection() {
     }
     delete pBleCallback;
     pBleCallback = nullptr;
+    delete pServerCallback;
+    pServerCallback = nullptr;
 }
 
 void BLEConnection::begin(const std::string& deviceName) {
@@ -96,23 +99,21 @@ void BLEConnection::begin(const std::string& deviceName) {
     sendMutex = xSemaphoreCreateMutex();
     BLEDevice::init(String(deviceName.c_str()));
     pServer = BLEDevice::createServer();
+
     class ServerCallbacks : public BLEServerCallbacks {
     public:
-        BLEConnection* bleCon;
-        ServerCallbacks(BLEConnection* con) : bleCon(con) {}
-
-        void onConnect(BLEServer* pServer) override {
-            // Request low latency connection parameters (7.5ms - 15ms)
-            // This is critical for BLE MIDI latency.
-            BLEDevice::setPower(ESP_PWR_LVL_P9); // Max power
-            pServer->updateConnParams(pServer->getConnId(), 6, 12, 0, 400);
+        void onConnect(BLEServer* server) override {
+            BLEDevice::setPower(ESP_PWR_LVL_P9);
+            server->updateConnParams(server->getConnId(), 6, 12, 0, 400);
         }
 
-        void onDisconnect(BLEServer* pServer) override {
+        void onDisconnect(BLEServer*) override {
             BLEDevice::startAdvertising();
         }
     };
-    pServer->setCallbacks(new ServerCallbacks(this));
+    delete pServerCallback;
+    pServerCallback = new ServerCallbacks();
+    pServer->setCallbacks(pServerCallback);
 
     BLEService* pService = pServer->createService(BLE_MIDI_SERVICE_UUID);
     pCharacteristic = pService->createCharacteristic(
@@ -150,14 +151,17 @@ void BLEConnection::begin(const std::string& deviceName) {
 
 bool BLEConnection::sendMidi(const uint8_t* data, size_t length) {
     if (!pCharacteristic || !sendMutex || length == 0) return false;
+
+    const size_t midiLen = (length > 18) ? 18 : length;
+
     if (xSemaphoreTake(sendMutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
 
     bool sent = false;
     if (isConnected()) {
         uint8_t blePacket[256];
         size_t outLen = 0;
-        
-        if (MidiCodec::buildBlePacket(data, length, millis(), blePacket, &outLen)) {
+
+        if (MidiCodec::buildBlePacket(data, midiLen, millis(), blePacket, &outLen)) {
             pCharacteristic->setValue(blePacket, outLen);
             pCharacteristic->notify();
             sent = true;

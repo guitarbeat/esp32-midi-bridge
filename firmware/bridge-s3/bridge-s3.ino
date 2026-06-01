@@ -15,7 +15,6 @@
 #include "BridgeSystem.h"
 #include "MidiBridge.h"
 #include "BridgeUi.h"
-#include "animation/BongoCat.h"
 
 // System Components — canvas allocated at static init (115 KB) while heap is clean.
 static Board* board = createBoard();
@@ -24,7 +23,6 @@ static Arduino_Canvas* canvas = new Arduino_Canvas(240, 240, board->getDisplay()
 static USBConnection usbMidi;
 static BLEConnection bleMidi;
 static UartConnection uartMidi(Serial2, 48 /* RX */, 47 /* TX */);
-static BongoCatDisplay bongoCat;
 
 void setup()
 {
@@ -56,7 +54,6 @@ void setup()
         Serial.flush();
         bridgeUi.begin(canvas);
         bridgeUi.setBoard(board);
-        bridgeUi.setBongoCat(&bongoCat);
         board->setBacklight(255);
         bridgeUi.refresh(millis(), true);
         canvas->flush();
@@ -90,7 +87,7 @@ void setup()
     });
 
     // 5. MIDI Hub Coordination
-    midiBridge.begin(&bridgeUi);
+    midiBridge.begin(&bridgeUi, []() { return bridgeSystem.isPaused(); });
     midiBridge.setMidiEngine(&bridgeSystem.engine());
     midiBridge.addTransport(&usbMidi);
     midiBridge.addTransport(&bleMidi);
@@ -108,7 +105,6 @@ void setup()
         uartMidi.begin(bridgeSystem.settings().uartBaudRate());
     }
     connectivityManager.begin();
-    bongoCat.begin();
 
     Serial.println("[SYSTEM] Deep Controller architecture initialized.");
 }
@@ -129,6 +125,13 @@ void loop()
     
     // UI Refresh
     if (canvas != nullptr) {
+        BridgeUiDiagnostics diag;
+        diag.usb = &usbMidi;
+        diag.ble = &bleMidi;
+        diag.usbIn = midiBridge.counters().usbPacketsSeen;
+        diag.bleOut = midiBridge.counters().blePacketsSent;
+        diag.bleSkip = midiBridge.counters().blePacketsSkipped;
+        bridgeUi.setDiagnostics(diag);
         bridgeUi.refresh(now);
         canvas->flush();
     }

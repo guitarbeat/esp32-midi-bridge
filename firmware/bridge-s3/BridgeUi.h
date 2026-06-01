@@ -5,8 +5,17 @@
 #include <Arduino_GFX_Library.h>
 
 class Board;
-class BongoCatDisplay;
+class BLEConnection;
 class BridgeSystem;
+class USBConnection;
+
+struct BridgeUiDiagnostics {
+    const USBConnection* usb = nullptr;
+    const BLEConnection* ble = nullptr;
+    uint32_t usbIn = 0;
+    uint32_t bleOut = 0;
+    uint32_t bleSkip = 0;
+};
 
 class BridgeUi {
 public:
@@ -20,13 +29,12 @@ public:
 
     void begin(Arduino_GFX* gfx);
     void setBoard(Board* board) { board_ = board; }
-    void setBongoCat(BongoCatDisplay* bongoCat) { bongoCat_ = bongoCat; }
+    void setDiagnostics(const BridgeUiDiagnostics& diag) { diagnostics_ = diag; }
 
     /** @brief Main refresh loop. */
     void refresh(uint32_t nowMs, bool force = false);
 
     /** @brief Called by system for high-priority display notifications. */
-    void notifyMidiEvent(const uint8_t* data);
     void notifyStatus(const char* text, uint16_t color);
 
     DisplayMode displayMode() const { return displayMode_; }
@@ -34,7 +42,8 @@ public:
 
 private:
     void drawHeader(uint32_t nowMs);
-    void drawCards(uint32_t nowMs);
+    void drawStatusRow(uint32_t nowMs);
+    void drawStatsRow();
     void drawConsole(uint32_t nowMs);
     void drawKeyboardBar();
     void drawToast(uint32_t nowMs);
@@ -42,7 +51,7 @@ private:
 
     Arduino_GFX* gfx = nullptr;
     Board* board_ = nullptr;
-    BongoCatDisplay* bongoCat_ = nullptr;
+    BridgeUiDiagnostics diagnostics_{};
     
     DisplayMode displayMode_ = DisplayMode::kFull;
     uint32_t lastRefreshMs_ = 0;
@@ -53,7 +62,7 @@ private:
         uint16_t color;
         uint32_t timestamp;
     };
-    static constexpr uint8_t kMaxLogEntries = 4;
+    static constexpr uint8_t kMaxLogEntries = 5;
     LogEntry logs_[kMaxLogEntries];
     uint8_t logHead_ = 0;
     uint8_t logCount_ = 0;

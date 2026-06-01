@@ -4,9 +4,26 @@
 *.swp
 *.swo
 *~
+.DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+
+# Build / compile outputs
+build/
+dist/
+firmware/**/build/
+/build-s3/
 
 # Claude Code
 CLAUDE.md
+
+# Cursor agent hooks (machine-local state)
+.cursor/hooks/state/
 
 # Legacy files (removed in v3.0.0)
 /displayhandler.h
@@ -17,7 +34,6 @@ CLAUDE.md
 /MIDI_PCM5102A_Handler.cpp
 /ESP32_PCM5102A_MIDI.h
 /ESP32_PCM5102A_MIDI.cpp
-/build-s3/
 
 # Internal research docs
 docs/

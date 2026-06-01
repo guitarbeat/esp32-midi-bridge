@@ -1,6 +1,7 @@
 #include "USBConnection.h"
 #include "Board.h"
 #include "BridgeLog.h"
+#include "MidiCodec.h"
 
 #include <string.h>
 #include <usb/usb_helpers.h>
@@ -78,11 +79,13 @@ USBConnection::USBConnection()
     queueMux(portMUX_INITIALIZER_UNLOCKED),
     firstMidiReceived(false),
     midiInterfaceNumber(-1),
+    midiAlternateSetting_(-1),
     deviceName(""),
     lastError(""),
     board_(nullptr),
     usbTaskHandle(nullptr)
 {
+    memset(usbRunningStatus_, 0, sizeof(usbRunningStatus_));
 }
 
 bool USBConnection::begin(Board* board)
@@ -163,6 +166,7 @@ void USBConnection::handleDeviceRemoved()
         if (midiInterfaceNumber >= 0) {
             usb_host_interface_release(clientHandle, deviceHandle, static_cast<uint8_t>(midiInterfaceNumber));
             midiInterfaceNumber = -1;
+            midiAlternateSetting_ = -1;
         }
         usb_host_device_close(clientHandle, deviceHandle);
         deviceHandle = nullptr;
@@ -175,6 +179,7 @@ void USBConnection::handleDeviceRemoved()
 
     deviceName = "";
     firstMidiReceived = false;
+    memset(usbRunningStatus_, 0, sizeof(usbRunningStatus_));
     lastError = "";
 
     BRIDGE_LOG_LN("[USB] Keyboard unplugged — plug in again (BLE stays up)");
@@ -187,7 +192,7 @@ void USBConnection::onMidiDataReceived(const uint8_t* data, size_t length)
     (void)length;
 }
 
-bool USBConnection::enqueueMidiMessage(const uint8_t* data, size_t /*length*/)
+bool USBConnection::enqueueMidiMessage(const uint8_t* data, size_t length)
 {
     portENTER_CRITICAL(&queueMux);
     const int next = (queueHead + 1) % QUEUE_SIZE;
@@ -195,8 +200,8 @@ bool USBConnection::enqueueMidiMessage(const uint8_t* data, size_t /*length*/)
         portEXIT_CRITICAL(&queueMux);
         return false;
     }
-    memcpy(usbQueue[queueHead].data, data, 3);
-    usbQueue[queueHead].length = 3;
+    memcpy(usbQueue[queueHead].data, data, length);
+    usbQueue[queueHead].length = length;
     queueHead = next;
     portEXIT_CRITICAL(&queueMux);
     return true;
@@ -219,8 +224,18 @@ void USBConnection::processQueue()
 {
     RawUsbMessage msg;
     while (dequeueMidiMessage(msg)) {
+        if (msg.length < 4) {
+            continue;
+        }
+
+        uint8_t raw[4];
+        size_t rawLen = 0;
+        if (!MidiCodec::decodeUsbEventToRaw(msg.data, usbRunningStatus_, raw, &rawLen)) {
+            continue;
+        }
+
         if (receiveCallback_) {
-            receiveCallback_(msg.data, msg.length);
+            receiveCallback_(raw, rawLen);
         }
     }
 }
@@ -254,6 +269,19 @@ void USBConnection::_usbTask(void* arg)
         }
 
         usb_host_client_handle_events(usbCon->clientHandle, pdMS_TO_TICKS(1));
+
+        if (usbCon->isReady) {
+            const unsigned long now = millis();
+            if ((now - usbCon->lastCheck) > usbCon->interval) {
+                usbCon->lastCheck = now;
+                for (int i = 0; i < kNumMidiInTransfers; i++) {
+                    if (usbCon->midiInTransfers[i] != nullptr) {
+                        usb_host_transfer_submit(usbCon->midiInTransfers[i]);
+                    }
+                }
+            }
+        }
+
         vTaskDelay(pdMS_TO_TICKS(1));
     }
 }
@@ -310,16 +338,14 @@ void USBConnection::_onReceive(usb_transfer_t* transfer)
 
     if (transfer->status == 0 && transfer->actual_num_bytes >= 4) {
         for (int offset = 0; offset + 4 <= transfer->actual_num_bytes; offset += 4) {
-            const uint8_t cin = transfer->data_buffer[offset] & 0x0F;
-            const uint8_t status = transfer->data_buffer[offset + 1];
-
-            if (cin == 0x00 && status == 0x00) {
+            if (transfer->data_buffer[offset] == 0x00) {
                 continue;
             }
 
-            if (usbCon->enqueueMidiMessage(transfer->data_buffer + offset + 1, 3)) {
+            if (usbCon->enqueueMidiMessage(transfer->data_buffer + offset, 4)) {
                 if (!usbCon->firstMidiReceived) {
                     usbCon->firstMidiReceived = true;
+                    const uint8_t status = transfer->data_buffer[offset + 1];
                     BRIDGE_LOG("[USB] First MIDI data received (status=0x%02X)\n", status);
                 }
             }
@@ -433,36 +459,143 @@ void USBConnection::_onSendComplete(usb_transfer_t* transfer)
     usbCon->processMidiOutQueue();
 }
 
-void USBConnection::_findAndClaimMidiInterface(const usb_intf_desc_t* intf)
+bool USBConnection::_isMidiInterface(const usb_intf_desc_t* intf) const
 {
-    if (intf == nullptr || isReady) {
-        return;
+    if (intf == nullptr) {
+        return false;
     }
 
     const bool isStandardMidi = (intf->bInterfaceClass == USB_CLASS_AUDIO &&
-                                 intf->bInterfaceSubClass == 0x03);
+                                 intf->bInterfaceSubClass == 0x03 &&
+                                 intf->bNumEndpoints > 0);
     const bool isLegacyAudio = (intf->bInterfaceClass == USB_CLASS_AUDIO &&
-                                intf->bInterfaceSubClass == 0x00);
+                                intf->bInterfaceSubClass == 0x00 &&
+                                intf->bNumEndpoints > 0);
     const bool isVendorMidi = (intf->bInterfaceClass == 0xFF &&
                                intf->bNumEndpoints >= 1);
+    return isStandardMidi || isLegacyAudio || isVendorMidi;
+}
 
-    if (!isStandardMidi && !isLegacyAudio && !isVendorMidi) {
-        return;
+bool USBConnection::_claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf,
+                                                     const uint8_t* config,
+                                                     uint16_t totalLength,
+                                                     uint16_t indexAfterIntf)
+{
+    if (intf == nullptr || isReady || config == nullptr) {
+        return false;
     }
 
-    if (isVendorMidi) {
+    if (intf->bInterfaceClass == 0xFF) {
         BRIDGE_LOG_LN("[USB] Warning: Device is in VENDOR mode (Class 0xFF). Roland pianos MUST be in 'Generic' mode for this bridge.");
     }
 
-    BRIDGE_LOG("[USB] Attempting to claim interface %d...\n", intf->bInterfaceNumber);
+    BRIDGE_LOG("[USB] Claiming interface %d alt %d (%d endpoints)...\n",
+               intf->bInterfaceNumber, intf->bAlternateSetting, intf->bNumEndpoints);
+
     const esp_err_t err = usb_host_interface_claim(clientHandle, deviceHandle,
                                                    intf->bInterfaceNumber, intf->bAlternateSetting);
     if (err != ESP_OK) {
-        BRIDGE_LOG("[USB] Failed to claim interface %d (err=%d)\n", intf->bInterfaceNumber, err);
-        return;
+        BRIDGE_LOG("[USB] Failed to claim interface %d alt %d (err=%d)\n",
+                   intf->bInterfaceNumber, intf->bAlternateSetting, err);
+        return false;
+    }
+
+    uint16_t idx = indexAfterIntf;
+    while (idx < totalLength) {
+        if (idx + 1 >= totalLength) {
+            break;
+        }
+
+        const uint8_t len = config[idx];
+        if (len < 2 || (idx + len) > totalLength) {
+            break;
+        }
+
+        const uint8_t descriptorType = config[idx + 1];
+        if (descriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
+            break;
+        }
+
+        if (descriptorType == USB_B_DESCRIPTOR_TYPE_ENDPOINT) {
+            const auto* ep = reinterpret_cast<const usb_ep_desc_t*>(&config[idx]);
+            _setupMidiEndpoint(ep);
+        }
+
+        idx += len;
+    }
+
+    if (midiInTransfers[0] == nullptr) {
+        usb_host_interface_release(clientHandle, deviceHandle, intf->bInterfaceNumber);
+        return false;
     }
 
     midiInterfaceNumber = static_cast<int8_t>(intf->bInterfaceNumber);
+    midiAlternateSetting_ = static_cast<int8_t>(intf->bAlternateSetting);
+    return true;
+}
+
+void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
+{
+    if (config_desc == nullptr) {
+        return;
+    }
+
+    const uint8_t* p = config_desc->val;
+    const uint16_t totalLength = config_desc->wTotalLength;
+    uint16_t index = 0;
+    bool claimedOk = false;
+
+    BRIDGE_LOG("[USB] Scanning %d bytes of descriptors...\n", totalLength);
+
+    while (index < totalLength) {
+        if (index + 1 >= totalLength) {
+            break;
+        }
+
+        const uint8_t len = p[index];
+        if (len < 2 || (index + len) > totalLength) {
+            break;
+        }
+
+        const uint8_t descriptorType = p[index + 1];
+
+        if (descriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
+            const auto* intf = reinterpret_cast<const usb_intf_desc_t*>(&p[index]);
+            BRIDGE_LOG("[USB] Found Interface %d alt %d: Class 0x%02X, SubClass 0x%02X, Endpoints %d\n",
+                       intf->bInterfaceNumber, intf->bAlternateSetting,
+                       intf->bInterfaceClass, intf->bInterfaceSubClass, intf->bNumEndpoints);
+
+            if (!isReady && _isMidiInterface(intf)) {
+                if (_claimInterfaceAndSetupEndpoints(intf, p, totalLength, index + len)) {
+                    claimedOk = true;
+                    break;
+                }
+            }
+        }
+
+        index += len;
+    }
+
+    if (claimedOk) {
+        isReady = true;
+        BRIDGE_LOG_LN("[USB]   MIDI IN/OUT configured. Applying Casio CT-S1 delay...");
+        vTaskDelay(pdMS_TO_TICKS(200));
+
+        for (int i = 0; i < kNumMidiInTransfers; i++) {
+            if (midiInTransfers[i] != nullptr) {
+                usb_host_transfer_submit(midiInTransfers[i]);
+            }
+        }
+        return;
+    }
+
+    if (!claimedOk) {
+        claimedOk = _tryEndpointFallback();
+    }
+
+    if (!claimedOk && lastError.length() == 0) {
+        lastError = "No USB MIDI interface found";
+    }
 }
 
 void USBConnection::_setupMidiInEndpoint(const usb_ep_desc_t* endpoint)
@@ -570,75 +703,4 @@ bool USBConnection::_tryEndpointFallback()
     usb_host_transfer_submit(midiInTransfers[0]);
     BRIDGE_LOG_LN("[USB] Fallback connected on 0x81.");
     return true;
-}
-
-void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
-{
-    if (config_desc == nullptr) {
-        return;
-    }
-
-    const uint8_t* p = config_desc->val;
-    const uint16_t totalLength = config_desc->wTotalLength;
-    uint16_t index = 0;
-    bool claimedOk = false;
-    bool inClaimedInterface = false;
-
-    BRIDGE_LOG("[USB] Scanning %d bytes of descriptors...\n", totalLength);
-
-    while (index < totalLength) {
-        if (index + 1 >= totalLength) {
-            break;
-        }
-
-        const uint8_t len = p[index];
-        if (len < 2 || (index + len) > totalLength) {
-            break;
-        }
-
-        const uint8_t descriptorType = p[index + 1];
-
-        if (descriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
-            const auto* intf = reinterpret_cast<const usb_intf_desc_t*>(&p[index]);
-            BRIDGE_LOG("[USB] Found Interface %d: Class 0x%02X, SubClass 0x%02X, Endpoints %d\n",
-                       intf->bInterfaceNumber, intf->bInterfaceClass,
-                       intf->bInterfaceSubClass, intf->bNumEndpoints);
-
-            inClaimedInterface = false;
-            if (!isReady && midiInterfaceNumber < 0) {
-                _findAndClaimMidiInterface(intf);
-                inClaimedInterface = (midiInterfaceNumber >= 0);
-            } else if (midiInterfaceNumber >= 0 &&
-                       intf->bInterfaceNumber == static_cast<uint8_t>(midiInterfaceNumber)) {
-                inClaimedInterface = true;
-            }
-        } else if (descriptorType == USB_B_DESCRIPTOR_TYPE_ENDPOINT && inClaimedInterface) {
-            const auto* ep = reinterpret_cast<const usb_ep_desc_t*>(&p[index]);
-            _setupMidiEndpoint(ep);
-        }
-
-        index += len;
-    }
-
-    if (midiInterfaceNumber >= 0 && midiInTransfers[0] != nullptr) {
-        isReady = true;
-        claimedOk = true;
-        BRIDGE_LOG_LN("[USB]   MIDI IN/OUT configured. Applying Casio CT-S1 delay...");
-        vTaskDelay(pdMS_TO_TICKS(200));
-
-        for (int i = 0; i < kNumMidiInTransfers; i++) {
-            if (midiInTransfers[i] != nullptr) {
-                usb_host_transfer_submit(midiInTransfers[i]);
-            }
-        }
-        return;
-    }
-
-    if (!claimedOk) {
-        claimedOk = _tryEndpointFallback();
-    }
-
-    if (!claimedOk && lastError.length() == 0) {
-        lastError = "No USB MIDI interface found";
-    }
 }

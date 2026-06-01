@@ -44,6 +44,8 @@ When USB host mode is active, native USB CDC may stop. Enable Wi-Fi debug loggin
 
 Design reference: [full-stack milestone design](../../docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md).
 
+Agent instructions for this sketch: [AGENTS.md](../../AGENTS.md#firmware-bridge-s3).
+
 ## Test
 
 1. Flash with `./scripts/flash-bridge-s3.sh` and confirm `./scripts/verify-boot.sh` passes.

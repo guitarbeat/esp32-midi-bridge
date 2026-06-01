@@ -25,8 +25,11 @@ public:
 
     MidiEngine();
 
-    /** @brief Processes an incoming raw MIDI packet. Applies filters and updates state. */
-    bool processPacket(uint8_t* packet, size_t length);
+    /** @brief Applies filter/transpose and updates UI state. Returns false if the packet must not leave the bridge. */
+    bool prepareOutbound(uint8_t* packet, size_t length);
+
+    /** @brief Alias for prepareOutbound — used by existing unit tests. */
+    bool processPacket(uint8_t* packet, size_t length) { return prepareOutbound(packet, length); }
 
     /** @brief Sets the transposition amount in semitones. */
     void setTranspose(int8_t semitones) { transpose_ = semitones; }
@@ -53,7 +56,5 @@ private:
     void updateNotesPerMinute();
     uint8_t clampNote(int note);
 };
-
-extern MidiEngine midiEngine;
 
 #endif

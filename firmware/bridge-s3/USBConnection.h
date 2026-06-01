@@ -33,6 +33,7 @@ public:
 
     const char* name() const override { return "USB-HOST"; }
     bool isConnected() const override { return isReady; }
+    bool isPrimaryInbound() const override { return true; }
     bool sendMidi(const uint8_t* packet, size_t length) override { return sendMidiMessage(packet, length); }
 
     bool canSend() const { return outTransfer != nullptr && midiOutQueue != nullptr; }
@@ -69,7 +70,9 @@ protected:
     portMUX_TYPE queueMux;
 
     bool firstMidiReceived;
+    uint8_t usbRunningStatus_[16];
     int8_t midiInterfaceNumber;
+    int8_t midiAlternateSetting_;
     String deviceName;
     String lastError;
     Board* board_;
@@ -87,7 +90,8 @@ protected:
     static void _onSendComplete(usb_transfer_t* transfer);
 
     void _parseConfig(const usb_config_desc_t* config_desc);
-    void _findAndClaimMidiInterface(const usb_intf_desc_t* intf);
+    bool _isMidiInterface(const usb_intf_desc_t* intf) const;
+    bool _claimInterfaceAndSetupEndpoints(const usb_intf_desc_t* intf, const uint8_t* config, uint16_t totalLength, uint16_t indexAfterIntf);
     void _setupMidiEndpoint(const usb_ep_desc_t* endpoint);
     void _setupMidiInEndpoint(const usb_ep_desc_t* endpoint);
     void _setupMidiOutEndpoint(const usb_ep_desc_t* endpoint);
