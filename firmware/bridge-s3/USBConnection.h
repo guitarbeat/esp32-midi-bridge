@@ -43,6 +43,11 @@ public:
     const String& getLastError() const { return lastError; }
     TaskHandle_t getTaskHandle() const { return usbTaskHandle; }
     const String& getDeviceName() const { return deviceName; }
+    bool hasSeenDevice() const { return deviceSeen_; }
+    uint32_t getRawUsbPacketsSeen() const { return rawUsbPacketsSeen_; }
+    uint32_t getDecodedMidiPacketsSeen() const { return decodedMidiPacketsSeen_; }
+    uint32_t getDecodeDropCount() const { return decodeDropCount_; }
+    uint8_t getLastRawStatus() const { return lastRawStatus_; }
 
     virtual void onMidiDataReceived(const uint8_t* data, size_t length);
     virtual void onDeviceConnected();
@@ -72,6 +77,11 @@ protected:
     portMUX_TYPE queueMux;
 
     bool firstMidiReceived;
+    volatile bool deviceSeen_;
+    volatile uint32_t rawUsbPacketsSeen_;
+    volatile uint32_t decodedMidiPacketsSeen_;
+    volatile uint32_t decodeDropCount_;
+    volatile uint8_t lastRawStatus_;
     uint8_t usbRunningStatus_[16];
     int8_t midiInterfaceNumber;
     int8_t midiAlternateSetting_;

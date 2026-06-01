@@ -161,6 +161,8 @@ If serial repeats `ESP-ROM` and never shows `[SYSTEM] Display canvas initialized
 - Confirm **5 V VBUS** on the host port. On ESP32-S3-USB-OTG, Micro-USB debug power alone
   can boot BLE while the Type-A port has no power for the keyboard — use **USB HOST**
   for the piano and **USB_DEV** for 5 V.
+- On Roland pianos with both ports, connect the ESP32 **USB HOST** port to the
+  piano's **USB COMPUTER** port, not the **USB MEMORY** flash-drive port.
 - Try another data-capable USB cable.
 - Check the on-screen hint: `Use HOST + power USB_DEV`.
 

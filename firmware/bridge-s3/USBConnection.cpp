@@ -79,6 +79,11 @@ USBConnection::USBConnection()
     queueTail(0),
     queueMux(portMUX_INITIALIZER_UNLOCKED),
     firstMidiReceived(false),
+    deviceSeen_(false),
+    rawUsbPacketsSeen_(0),
+    decodedMidiPacketsSeen_(0),
+    decodeDropCount_(0),
+    lastRawStatus_(0),
     midiInterfaceNumber(-1),
     midiAlternateSetting_(-1),
     deviceName(""),
@@ -180,6 +185,11 @@ void USBConnection::handleDeviceRemoved()
 
     deviceName = "";
     firstMidiReceived = false;
+    deviceSeen_ = false;
+    rawUsbPacketsSeen_ = 0;
+    decodedMidiPacketsSeen_ = 0;
+    decodeDropCount_ = 0;
+    lastRawStatus_ = 0;
     memset(usbRunningStatus_, 0, sizeof(usbRunningStatus_));
     lastError = "";
 
@@ -232,8 +242,11 @@ void USBConnection::processQueue()
         uint8_t raw[4];
         size_t rawLen = 0;
         if (!MidiCodec::decodeUsbEventToRaw(msg.data, usbRunningStatus_, raw, &rawLen)) {
+            decodeDropCount_++;
             continue;
         }
+        decodedMidiPacketsSeen_++;
+        lastRawStatus_ = raw[0];
 
         if (receiveCallback_) {
             receiveCallback_(raw, rawLen);
@@ -282,6 +295,11 @@ void USBConnection::_clientEventCallback(const usb_host_client_event_msg_t* even
 
     switch (eventMsg->event) {
         case USB_HOST_CLIENT_EVENT_NEW_DEV:
+            usbCon->deviceSeen_ = true;
+            usbCon->rawUsbPacketsSeen_ = 0;
+            usbCon->decodedMidiPacketsSeen_ = 0;
+            usbCon->decodeDropCount_ = 0;
+            usbCon->lastRawStatus_ = 0;
             BRIDGE_LOG("[USB] New device detected at address %d\n", eventMsg->new_dev.address);
             err = usb_host_device_open(usbCon->clientHandle, eventMsg->new_dev.address, &usbCon->deviceHandle);
             if (err != ESP_OK) {
@@ -332,6 +350,7 @@ void USBConnection::_onReceive(usb_transfer_t* transfer)
             }
 
             if (usbCon->enqueueMidiMessage(transfer->data_buffer + offset, 4)) {
+                usbCon->rawUsbPacketsSeen_++;
                 if (!usbCon->firstMidiReceived) {
                     usbCon->firstMidiReceived = true;
                     const uint8_t status = transfer->data_buffer[offset + 1];

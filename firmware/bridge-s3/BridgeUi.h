@@ -60,6 +60,11 @@ private:
     void drawPerformanceMode();
     void drawMinimalMode();
     void drawStageMode();
+    void drawTransportRail(int16_t y);
+    void drawLivePanel(int16_t y);
+    void drawVelocityBar(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t velocity);
+    void drawMetricStrip(int16_t y);
+    void drawShortText(const char* text, int16_t x, int16_t y, int16_t maxW, uint16_t color, uint8_t textSize);
     void drawPerformanceSummary(int16_t y);
     void drawMiniKeyboard(int16_t x, int16_t y, int16_t w, int16_t h, uint8_t firstNote, uint8_t noteCount);
     uint8_t keyboardFirstNote() const { return keyboardFirstNote_; }
