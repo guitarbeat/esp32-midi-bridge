@@ -115,21 +115,23 @@ jobs:
             site/firmware/bridge-s3-esp32s3-usb-otg.bin
           if-no-files-found: error
 
+      - name: Compile classic ESP32 MAX3421E fallback
+        run: |
+          arduino-cli compile \
+            --fqbn esp32:esp32:esp32 \
+            ./firmware/bridge-classic
+
       - name: Configure GitHub Pages
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/configure-pages@v5
+        with:
+          enablement: true
 
       - name: Upload GitHub Pages artifact
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: actions/upload-pages-artifact@v3
         with:
           path: site
-
-      - name: Compile classic ESP32 MAX3421E fallback
-        run: |
-          arduino-cli compile \
-            --fqbn esp32:esp32:esp32 \
-            ./firmware/bridge-classic
 
   deploy-pages:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
