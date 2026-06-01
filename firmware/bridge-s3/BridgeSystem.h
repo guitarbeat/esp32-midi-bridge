@@ -23,7 +23,6 @@ public:
     // --- Command Surface (Deep Actions) ---
     void stepTranspose(int8_t delta);
     void cycleMidiChannel();
-    void saveDisplayMode(uint8_t mode);
     void cycleBacklightDim();
     void togglePause();
     void sendPanic();

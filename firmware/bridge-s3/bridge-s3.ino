@@ -63,7 +63,6 @@ void setup()
         Serial.printf("[SYSTEM] Canvas framebuffer OK (%u bytes free heap)\n", ESP.getFreeHeap());
         Serial.flush();
         bridgeUi.begin(canvas);
-        bridgeUi.setDisplayMode(static_cast<BridgeUi::DisplayMode>(bridgeSystem.settings().displayModeIndex()));
         bridgeUi.setBoard(board);
         board->setBacklight(255);
         bridgeUi.refresh(millis(), true);
@@ -82,7 +81,7 @@ void setup()
     inputManager.mapButton("MENU", board->getButtonPin("MENU"));
 
     inputManager.onEvent("OK", [](InputManager::Event e){ 
-        if (e == InputManager::Event::kTap) bridgeUi.cycleDisplayMode();
+        if (e == InputManager::Event::kTap) bridgeUi.confirmUnifiedView();
         else if (e == InputManager::Event::kLongHold) bridgeSystem.sendPanic();
     });
     inputManager.onEvent("UP", [](InputManager::Event e){ 

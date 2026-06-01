@@ -32,11 +32,6 @@ void BridgeSystem::cycleMidiChannel()
     engine_.setChannelFilter(settings_.midiChannelFilter());
 }
 
-void BridgeSystem::saveDisplayMode(uint8_t mode)
-{
-    settings_.saveDisplayMode(mode);
-}
-
 void BridgeSystem::cycleBacklightDim()
 {
     settings_.cycleBacklightDim();

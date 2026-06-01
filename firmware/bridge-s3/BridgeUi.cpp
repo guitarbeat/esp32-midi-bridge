@@ -31,14 +31,6 @@ bool isBlackKey(uint8_t note)
     }
 }
 
-const char* displayModeName(BridgeUi::DisplayMode mode)
-{
-    switch (mode) {
-        case BridgeUi::DisplayMode::kUnified: return "UNIFIED";
-        default: return "UNIFIED";
-    }
-}
-
 uint8_t clampKeyboardFirstNote(int firstNote)
 {
     if (firstNote < 0) {
@@ -85,11 +77,9 @@ void BridgeUi::notifyStatus(const char* text, uint16_t color)
     if (logCount_ < kMaxLogEntries) logCount_++;
 }
 
-void BridgeUi::cycleDisplayMode()
+void BridgeUi::confirmUnifiedView()
 {
-    displayMode_ = DisplayMode::kUnified;
-    bridgeSystem.saveDisplayMode(0);
-    showToast(displayModeName(displayMode_), millis());
+    showToast("UNIFIED", millis());
 }
 
 void BridgeUi::drawUnifiedMode(uint32_t nowMs)

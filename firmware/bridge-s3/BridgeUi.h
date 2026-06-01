@@ -29,11 +29,6 @@ struct BridgeUiDiagnostics {
 
 class BridgeUi {
 public:
-    enum class DisplayMode : uint8_t {
-        kUnified = 0,
-        kModeCount
-    };
-
     void begin(Arduino_GFX* gfx);
     void setBoard(Board* board) { board_ = board; }
     void setDiagnostics(const BridgeUiDiagnostics& diag) { diagnostics_ = diag; }
@@ -44,9 +39,7 @@ public:
     /** @brief Called by system for high-priority display notifications. */
     void notifyStatus(const char* text, uint16_t color);
 
-    DisplayMode displayMode() const { return displayMode_; }
-    void setDisplayMode(DisplayMode mode) { (void)mode; displayMode_ = DisplayMode::kUnified; }
-    void cycleDisplayMode();
+    void confirmUnifiedView();
 
 private:
     void drawHeader(uint32_t nowMs);
@@ -65,10 +58,8 @@ private:
     Board* board_ = nullptr;
     BridgeUiDiagnostics diagnostics_{};
     
-    DisplayMode displayMode_ = DisplayMode::kUnified;
     uint8_t keyboardFirstNote_ = 48;
     uint32_t lastRefreshMs_ = 0;
-    uint32_t lastMidiMs_ = 0;
 
     struct LogEntry {
         char text[32];

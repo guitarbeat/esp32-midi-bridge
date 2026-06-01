@@ -11,7 +11,6 @@ constexpr char kKeyBleName[] = "ble_name";
 constexpr char kKeyDimMs[] = "dim_ms";
 constexpr char kKeyTranspose[] = "transpose";
 constexpr char kKeyChannel[] = "channel";
-constexpr char kKeyDisplay[] = "display";
 constexpr char kKeyUartEnable[] = "uart_en";
 constexpr char kKeyUartBaud[] = "uart_baud";
 constexpr uint32_t kSchemaVersion = 1;
@@ -50,7 +49,6 @@ void BridgeSettings::load()
     backlightDimMs_ = prefs.getUInt(kKeyDimMs, backlightDimMs_);
     transpose_ = static_cast<int8_t>(prefs.getChar(kKeyTranspose, transpose_));
     midiChannel_ = prefs.getUChar(kKeyChannel, midiChannel_);
-    displayMode_ = prefs.getUChar(kKeyDisplay, displayMode_);
     uartEnabled_ = prefs.getBool(kKeyUartEnable, uartEnabled_);
     uartBaudRate_ = prefs.getUInt(kKeyUartBaud, uartBaudRate_);
 
@@ -59,9 +57,6 @@ void BridgeSettings::load()
     }
     if (midiChannel_ > 16) {
         midiChannel_ = 0;
-    }
-    if (displayMode_ >= 1) {
-        displayMode_ = 0;
     }
 
     prefs.end();
@@ -79,18 +74,9 @@ void BridgeSettings::saveAll()
     prefs.putUInt(kKeyDimMs, backlightDimMs_);
     prefs.putChar(kKeyTranspose, transpose_);
     prefs.putUChar(kKeyChannel, midiChannel_);
-    prefs.putUChar(kKeyDisplay, displayMode_);
     prefs.putBool(kKeyUartEnable, uartEnabled_);
     prefs.putUInt(kKeyUartBaud, uartBaudRate_);
     prefs.end();
-}
-
-void BridgeSettings::saveDisplayMode(uint8_t mode)
-{
-    mode = 0;
-    if (displayMode_ == mode) return;
-    displayMode_ = mode;
-    saveAll();
 }
 
 void BridgeSettings::stepTranspose(int8_t delta)
