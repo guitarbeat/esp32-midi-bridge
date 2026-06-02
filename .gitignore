@@ -22,6 +22,7 @@ site/*
 !site/index.html
 firmware/**/build/
 /build-s3/
+/diagnostics/
 
 # Claude Code
 CLAUDE.md

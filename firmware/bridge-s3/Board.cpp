@@ -79,23 +79,31 @@ public:
     }
 
     void enableUsbHostPower() override {
-        Serial.println("[USB] Enabling host power rails...");
+        Serial.printf("[USB] Enabling host power rails: SEL=%u VBUS=%u LIMIT=%u BOOST=%u\n",
+                      USB_HOST_ENABLE_SEL ? 1 : 0,
+                      USB_HOST_ENABLE_VBUS ? 1 : 0,
+                      USB_HOST_ENABLE_LIMIT ? 1 : 0,
+                      USB_HOST_ENABLE_BOOST ? 1 : 0);
         Serial.flush();
 #if USB_HOST_ENABLE_SEL
         pinMode(18 /* SEL */, OUTPUT);
         digitalWrite(18, HIGH);
+        Serial.println("[USB] Rail GPIO18 SEL=HIGH");
 #endif
 #if USB_HOST_ENABLE_VBUS
         pinMode(12 /* VBUS */, OUTPUT);
         digitalWrite(12, HIGH);
+        Serial.println("[USB] Rail GPIO12 VBUS=HIGH");
 #endif
 #if USB_HOST_ENABLE_LIMIT
         pinMode(17 /* LIMIT */, OUTPUT);
         digitalWrite(17, HIGH);
+        Serial.println("[USB] Rail GPIO17 LIMIT=HIGH");
 #endif
 #if USB_HOST_ENABLE_BOOST
         pinMode(13 /* BOOST */, OUTPUT);
         digitalWrite(13, LOW);
+        Serial.println("[USB] Rail GPIO13 BOOST=LOW");
 #endif
         delay(500);
         Serial.println("[USB] Host power rails stable.");

@@ -63,13 +63,13 @@ fi
 
 FAIL=0
 check_absent() {
-  if echo "$LOG" | grep -q "$1"; then
+  if echo "$LOG" | grep -F -q "$1"; then
     echo "FAIL: found forbidden marker: $1" >&2
     FAIL=1
   fi
 }
 check_present() {
-  if ! echo "$LOG" | grep -q "$1"; then
+  if ! echo "$LOG" | grep -F -q "$1"; then
     echo "FAIL: missing required marker: $1" >&2
     FAIL=1
   else

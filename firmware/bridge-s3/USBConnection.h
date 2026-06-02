@@ -51,6 +51,9 @@ public:
     uint32_t getDecodedMidiPacketsSeen() const { return decodedMidiPacketsSeen_; }
     uint32_t getDecodeDropCount() const { return decodeDropCount_; }
     uint8_t getLastRawStatus() const { return lastRawStatus_; }
+    const char* getHostStage() const { return hostStage_; }
+    uint32_t getHostStartedAtMs() const { return hostStartedAtMs_; }
+    const char* getRailConfig() const { return railConfig_; }
     uint8_t getMidiInEndpoint() const { return midiInEndpoint_; }
     uint8_t getMidiOutEndpoint() const { return midiOutEndpoint_; }
     uint8_t getClaimedInterfaceClass() const { return claimedInterfaceClass_; }
@@ -115,6 +118,9 @@ protected:
     String lastError;
     String descriptorSummary_;
     Board* board_;
+    char hostStage_[24];
+    char railConfig_[40];
+    uint32_t hostStartedAtMs_;
 
     bool enqueueMidiMessage(const uint8_t* data, size_t length);
     bool dequeueMidiMessage(RawUsbMessage& msg);
@@ -140,6 +146,7 @@ protected:
     bool _tryEndpointFallback();
     void loadDeviceInfo();
     void handleDeviceRemoved();
+    void setHostStage(const char* stage);
 };
 
 #endif

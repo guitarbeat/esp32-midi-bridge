@@ -18,6 +18,7 @@
 | [`read_serial.py`](read_serial.py) | Stream USB Serial/JTAG logs; `--reset` for watchdog reset; close before flash |
 | [`scripts/wifi_log.py`](scripts/wifi_log.py) | Receive Wi-Fi UDP debug logs on port 3333 (`ENABLE_WIFI_DEBUG=1`) |
 | [`scripts/probe-ble-midi.sh`](scripts/probe-ble-midi.sh) | macOS BLE MIDI probe; subscribes to bridge notifications and can send a test note |
+| [`scripts/run-hardware-diagnostics.sh`](scripts/run-hardware-diagnostics.sh) | Compile or flash/probe USB host rail diagnostic builds; writes ignored evidence logs |
 | [`scripts/test.sh`](scripts/test.sh) | Host-side unit tests |
 
 **Standard FQBN** (use everywhere for ESP32-S3-USB-OTG):
@@ -164,22 +165,32 @@ starts. If connection succeeds before USB host starts but times out immediately
 after USB host starts, continue investigating USB host mux/power and scheduler
 interaction.
 
-USB host startup isolation defines:
+USB host startup isolation matrix:
 
 ```bash
-# Install USB host without switching board host rails/mux.
-BUILD_DEFINES='ENABLE_BLE_DIAGNOSTICS=1 USB_HOST_ENABLE_POWER_RAILS=0' \
-  ./scripts/flash-bridge-s3.sh
+# Compile all diagnostic rail combinations without flashing.
+./scripts/run-hardware-diagnostics.sh --compile-only
 
-# Switch only USB_SEL GPIO 18 after BLE subscribe.
-BUILD_DEFINES='ENABLE_BLE_DIAGNOSTICS=1 USB_HOST_DEFER_UNTIL_BLE_SUBSCRIBE_MS=30000 USB_HOST_START_AFTER_BLE_SUBSCRIBE_DELAY_MS=5000 USB_HOST_ENABLE_SEL=1 USB_HOST_ENABLE_VBUS=0 USB_HOST_ENABLE_LIMIT=0 USB_HOST_ENABLE_BOOST=0' \
-  ./scripts/flash-bridge-s3.sh
+# Flash one case and capture boot + BLE probe evidence.
+./scripts/run-hardware-diagnostics.sh --flash --case sel-only --port /dev/cu.usbmodem1101
+
+# Run the full hardware matrix when you can supervise the connected board.
+./scripts/run-hardware-diagnostics.sh --flash --port /dev/cu.usbmodem1101 --probe-duration 75
 ```
 
+Diagnostic logs are written to `diagnostics/<timestamp>/` and are gitignored.
+Cases: `no-rails`, `sel-only`, `rails-no-sel`, `vbus-only`, `limit-only`,
+`boost-only`, and `normal`. Each build advertises BLE first, waits for a notify
+subscription, delays 5 seconds, then starts USB host. BLE diagnostic
+notifications include the USB host stage and active rail config.
+
 Observed so far: BLE stayed connected and emitted diagnostics when USB host was
-installed with `USB_HOST_ENABLE_POWER_RAILS=0`. BLE timed out when the normal
-host rails/mux path was enabled, so the next isolation step is GPIO 18
-(`USB_SEL`) by itself, then VBUS/limit/boost without SEL.
+installed with `USB_HOST_ENABLE_POWER_RAILS=0`. BLE also stayed connected for a
+full 75 second `rails-no-sel` probe (`SEL=0 VBUS=1 LIMIT=1 BOOST=1`) with 73
+diagnostic notifications and no USB device expected. A `sel-only` probe stayed
+connected until it was interrupted. BLE timed out when the normal host rails/mux
+path was enabled, so the next evidence to capture is the full `normal` case with
+fresh diagnostics, then individual rails only if needed.
 
 ### Roland F-20 debugging note
 

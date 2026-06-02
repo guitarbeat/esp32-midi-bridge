@@ -172,7 +172,12 @@ void BridgeUi::drawStatsRow()
     const uint32_t usbDecoded = diagnostics_.usb != nullptr ? diagnostics_.usb->getDecodedMidiPacketsSeen() : 0;
     const uint32_t usbDrops = diagnostics_.usb != nullptr ? diagnostics_.usb->getDecodeDropCount() : 0;
 
-    if (diagnostics_.usb != nullptr &&
+    if (diagnostics_.usb != nullptr && !diagnostics_.usb->hasSeenDevice()) {
+        gfx->printf("USB STAGE %.20s", diagnostics_.usb->getHostStage());
+        gfx->setCursor(14, 90);
+        gfx->setTextColor(kMutedText);
+        gfx->printf("%.28s", diagnostics_.usb->getRailConfig());
+    } else if (diagnostics_.usb != nullptr &&
         diagnostics_.usb->hasSeenDevice() &&
         diagnostics_.usbStats.received == 0) {
         const uint16_t vid = diagnostics_.usb->getVendorId();

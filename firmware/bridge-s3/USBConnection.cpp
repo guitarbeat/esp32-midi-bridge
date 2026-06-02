@@ -120,21 +120,39 @@ USBConnection::USBConnection()
     deviceName(""),
     lastError(""),
     board_(nullptr),
+    hostStage_("idle"),
+    railConfig_("SEL=? VBUS=? LIMIT=? BOOST=?"),
+    hostStartedAtMs_(0),
     usbTaskHandle(nullptr)
 {
     memset(usbRunningStatus_, 0, sizeof(usbRunningStatus_));
+    snprintf(railConfig_, sizeof(railConfig_), "SEL=%u VBUS=%u LIMIT=%u BOOST=%u",
+             USB_HOST_ENABLE_SEL ? 1 : 0,
+             USB_HOST_ENABLE_VBUS ? 1 : 0,
+             USB_HOST_ENABLE_LIMIT ? 1 : 0,
+             USB_HOST_ENABLE_BOOST ? 1 : 0);
 }
 
 bool USBConnection::begin(Board* board)
 {
     board_ = board;
+    hostStartedAtMs_ = millis();
+    setHostStage("alloc queue");
+    BRIDGE_LOG("[USB] Host begin rail config: %s powerRails=%u deferMs=%u startDelayMs=%u taskPrio=%u\n",
+               railConfig_,
+               USB_HOST_ENABLE_POWER_RAILS ? 1 : 0,
+               USB_HOST_DEFER_UNTIL_BLE_SUBSCRIBE_MS,
+               USB_HOST_START_AFTER_BLE_SUBSCRIBE_DELAY_MS,
+               USB_MIDI_TASK_PRIORITY);
 
     midiOutQueue = xQueueCreate(kMidiOutQueueDepth, sizeof(uint8_t[4]));
     if (midiOutQueue == nullptr) {
         lastError = "MIDI OUT queue create failed";
+        setHostStage("queue failed");
         return false;
     }
 
+    setHostStage("install");
     usb_host_config_t config = {
         .skip_phy_setup = false,
         .intr_flags = ESP_INTR_FLAG_LEVEL1,
@@ -142,9 +160,11 @@ bool USBConnection::begin(Board* board)
     esp_err_t err = usb_host_install(&config);
     if (err != ESP_OK) {
         lastError = "USB host install failed (err=" + String(err) + ")";
+        setHostStage("install fail");
         return false;
     }
 
+    setHostStage("rails");
     if (board_ != nullptr && USB_HOST_ENABLE_POWER_RAILS) {
         board_->enableUsbHostPower();
         BRIDGE_LOG_LN("[USB] Host power rails enabled (USB_SEL/VBUS)");
@@ -152,6 +172,7 @@ bool USBConnection::begin(Board* board)
         BRIDGE_LOG_LN("[USB] Host power rails intentionally disabled by build config");
     }
 
+    setHostStage("client reg");
     usb_host_client_config_t client_config = {
         .is_synchronous = true,
         .max_num_event_msg = 10,
@@ -163,12 +184,15 @@ bool USBConnection::begin(Board* board)
     err = usb_host_client_register(&client_config, &clientHandle);
     if (err != ESP_OK) {
         lastError = "USB client register failed (err=" + String(err) + ")";
+        setHostStage("client fail");
         return false;
     }
 
+    setHostStage("task");
     xTaskCreatePinnedToCore(_usbTask, "usb_midi", 4096, this, USB_MIDI_TASK_PRIORITY, &usbTaskHandle, 0);
 
     lastError = "";
+    setHostStage("wait device");
     BRIDGE_LOG_LN("[USB] Host initialized");
     return true;
 }
@@ -241,6 +265,7 @@ void USBConnection::handleDeviceRemoved()
     lastError = "";
 
     BRIDGE_LOG_LN("[USB] Keyboard unplugged — plug in again (BLE stays up)");
+    setHostStage("wait device");
     onDeviceDisconnected();
 }
 
@@ -360,6 +385,15 @@ const RawUsbMessage& USBConnection::getQueueMessage(int index) const
     return usbQueue[realIndex];
 }
 
+void USBConnection::setHostStage(const char* stage)
+{
+    if (stage == nullptr) {
+        return;
+    }
+    strncpy(hostStage_, stage, sizeof(hostStage_) - 1);
+    hostStage_[sizeof(hostStage_) - 1] = '\0';
+}
+
 void USBConnection::_usbTask(void* arg)
 {
     USBConnection* usbCon = static_cast<USBConnection*>(arg);
@@ -386,6 +420,7 @@ void USBConnection::_clientEventCallback(const usb_host_client_event_msg_t* even
 
     switch (eventMsg->event) {
         case USB_HOST_CLIENT_EVENT_NEW_DEV:
+            usbCon->setHostStage("device seen");
             usbCon->deviceSeen_ = true;
             usbCon->rawUsbPacketsSeen_ = 0;
             usbCon->decodedMidiPacketsSeen_ = 0;
@@ -395,29 +430,36 @@ void USBConnection::_clientEventCallback(const usb_host_client_event_msg_t* even
             err = usb_host_device_open(usbCon->clientHandle, eventMsg->new_dev.address, &usbCon->deviceHandle);
             if (err != ESP_OK) {
                 usbCon->lastError = "Device open failed (err=" + String(err) + ")";
+                usbCon->setHostStage("open fail");
                 BRIDGE_LOG("[USB] %s\n", usbCon->lastError.c_str());
                 return;
             }
+            usbCon->setHostStage("descriptor");
             usbCon->loadDeviceInfo();
             {
                 const usb_config_desc_t* config_desc;
                 err = usb_host_get_active_config_descriptor(usbCon->deviceHandle, &config_desc);
                 if (err != ESP_OK) {
                     usbCon->lastError = "Config descriptor failed (err=" + String(err) + ")";
+                    usbCon->setHostStage("desc fail");
                     BRIDGE_LOG("[USB] %s\n", usbCon->lastError.c_str());
                     return;
                 }
                 BRIDGE_LOG("[USB] Active config length: %d\n", config_desc->wTotalLength);
+                usbCon->setHostStage("scan config");
                 usbCon->_parseConfig(config_desc);
             }
             if (usbCon->isReady) {
                 usbCon->lastError = "";
+                usbCon->setHostStage("ready");
                 BRIDGE_LOG("[USB] MIDI device '%s' ready.\n", usbCon->deviceName.c_str());
                 usbCon->onDeviceConnected();
             } else if (usbCon->lastError.length() == 0) {
                 usbCon->lastError = "No MIDI interface found";
+                usbCon->setHostStage("no midi");
                 BRIDGE_LOG_LN("[USB] Error: No MIDI interface found. Check if the device is in 'Generic' USB mode.");
             } else {
+                usbCon->setHostStage("error");
                 BRIDGE_LOG("[USB] Error: %s\n", usbCon->lastError.c_str());
             }
             break;

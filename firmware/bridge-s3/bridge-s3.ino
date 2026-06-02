@@ -174,7 +174,9 @@ void loop()
         lastBleDiagMs = now;
         char diag[180];
         snprintf(diag, sizeof(diag),
-                 "DIAG USB seen=%u ready=%u canOut=%u vid=%04X pid=%04X if=%d in=%02X out=%02X raw=%lu midi=%lu drops=%lu mode=%c err=%.32s desc=%.72s",
+                 "DIAG USB stage=%.18s rails=%.30s seen=%u ready=%u canOut=%u vid=%04X pid=%04X if=%d in=%02X out=%02X raw=%lu midi=%lu drops=%lu mode=%c err=%.28s",
+                 usbMidi.getHostStage(),
+                 usbMidi.getRailConfig(),
                  usbMidi.hasSeenDevice() ? 1 : 0,
                  usbMidi.isConnected() ? 1 : 0,
                  usbMidi.canSend() ? 1 : 0,
@@ -187,8 +189,7 @@ void loop()
                  usbMidi.getDecodedMidiPacketsSeen(),
                  usbMidi.getDecodeDropCount(),
                  usbMidi.isVendorByteStreamMode() ? 'S' : 'P',
-                 usbMidi.getLastError().c_str(),
-                 usbMidi.getDescriptorSummary().c_str());
+                 usbMidi.getLastError().c_str());
         bleMidi.sendDebugText(diag);
     }
 #endif
