@@ -19,6 +19,7 @@
 | [`scripts/wifi_log.py`](scripts/wifi_log.py) | Receive Wi-Fi UDP debug logs on port 3333 (`ENABLE_WIFI_DEBUG=1`) |
 | [`scripts/probe-ble-midi.sh`](scripts/probe-ble-midi.sh) | macOS BLE MIDI probe; subscribes to bridge notifications and can send a test note |
 | [`scripts/run-hardware-diagnostics.sh`](scripts/run-hardware-diagnostics.sh) | Compile or flash/probe USB host rail diagnostic builds; writes ignored evidence logs |
+| [`scripts/analyze-hardware-diagnostics.py`](scripts/analyze-hardware-diagnostics.py) | Summarize hardware diagnostic logs into stage/rail/BLE/USB evidence lines |
 | [`scripts/test.sh`](scripts/test.sh) | Host-side unit tests |
 
 **Standard FQBN** (use everywhere for ESP32-S3-USB-OTG):
@@ -168,7 +169,7 @@ interaction.
 USB host startup isolation matrix:
 
 ```bash
-# Compile all diagnostic rail combinations without flashing.
+# Compile all diagnostic rail combinations without flashing; no board required.
 ./scripts/run-hardware-diagnostics.sh --compile-only
 
 # Flash one case and capture boot + BLE probe evidence.
@@ -182,7 +183,12 @@ Diagnostic logs are written to `diagnostics/<timestamp>/` and are gitignored.
 Cases: `no-rails`, `sel-only`, `rails-no-sel`, `vbus-only`, `limit-only`,
 `boost-only`, and `normal`. Each build advertises BLE first, waits for a notify
 subscription, delays 5 seconds, then starts USB host. BLE diagnostic
-notifications include the USB host stage and active rail config.
+notifications include the USB host stage and active rail config. The runner
+appends one analyzer line per flashed case; rerun the analyzer manually with:
+
+```bash
+./scripts/analyze-hardware-diagnostics.py diagnostics/rails-no-sel-run
+```
 
 Observed so far: BLE stayed connected and emitted diagnostics when USB host was
 installed with `USB_HOST_ENABLE_POWER_RAILS=0`. BLE also stayed connected for a

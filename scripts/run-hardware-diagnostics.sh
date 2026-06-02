@@ -163,6 +163,8 @@ run_case() {
       echo "[$name] BLE probe FAILED" | tee -a "$SUMMARY"
     fi
   fi
+
+  "$ROOT/scripts/analyze-hardware-diagnostics.py" "$LOG_DIR" | grep "^$name:" | tee -a "$SUMMARY" || true
 }
 
 CASES=(no-rails sel-only rails-no-sel vbus-only limit-only boost-only normal)

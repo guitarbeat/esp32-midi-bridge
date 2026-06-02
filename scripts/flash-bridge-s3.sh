@@ -72,28 +72,26 @@ wait_for_upload_port() {
   done
 }
 
-if [[ -z "$PORT" ]]; then
+if [[ -z "$PORT" && "$COMPILE_ONLY" != "1" ]]; then
   wait_for_upload_port 10 || true
 fi
 
-if [[ -z "$PORT" ]]; then
+if [[ -z "$PORT" && "$COMPILE_ONLY" != "1" ]]; then
   echo "No /dev/cu.usbmodem* port found. Plug in the board and retry." >&2
   exit 1
 fi
 
-if PIDS="$(lsof -t "$PORT" 2>/dev/null)"; then
+if [[ -n "$PORT" ]] && PIDS="$(lsof -t "$PORT" 2>/dev/null)"; then
   echo "Port $PORT is busy (PID(s): $PIDS)." >&2
   echo "Close read_serial.py, Serial Monitor, and any other serial client, then retry." >&2
   exit 1
 fi
 
-ESPTOOL="$(find "$HOME/Library/Arduino15/packages/esp32/tools/esptool_py" -name esptool -type f 2>/dev/null | sort -V | tail -1)"
-if [[ -z "$ESPTOOL" ]]; then
-  echo "esptool not found. Install esp32:esp32 core via arduino-cli." >&2
-  exit 1
+if [[ -n "$PORT" ]]; then
+  echo "Port: $PORT"
+else
+  echo "Port: (not required for compile-only)"
 fi
-
-echo "Port: $PORT"
 echo "Compiling ($FQBN)..."
 if [[ -n "$BUILD_DEFINES" ]]; then
   echo "Build defines: $BUILD_DEFINES"
@@ -105,6 +103,12 @@ arduino-cli "${compile_args[@]}" "$ROOT/firmware/bridge-s3"
 if [[ "$COMPILE_ONLY" == "1" ]]; then
   echo "Compile-only mode complete. Build path: $BUILD_PATH"
   exit 0
+fi
+
+ESPTOOL="$(find "$HOME/Library/Arduino15/packages/esp32/tools/esptool_py" -name esptool -type f 2>/dev/null | sort -V | tail -1)"
+if [[ -z "$ESPTOOL" ]]; then
+  echo "esptool not found. Install esp32:esp32 core via arduino-cli." >&2
+  exit 1
 fi
 
 if [[ ! -e "$PORT" ]]; then
