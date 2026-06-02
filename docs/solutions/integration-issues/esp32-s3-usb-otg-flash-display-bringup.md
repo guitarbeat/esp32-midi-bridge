@@ -73,7 +73,7 @@ Use the board-specific FQBN (verified upload PASS):
 esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc
 ```
 
-Documented in `BUILD.md` and `.github/workflows/arduino-build.yml`.
+Documented in `docs/build.md` and `.github/workflows/arduino-build.yml`.
 
 ### 2. Close serial clients before flash
 
@@ -166,16 +166,16 @@ Do not declare success until these are confirmed:
 
 ### Operational quick reference
 
-See `BUILD.md` for recovery steps (BOOT+RESET manual download mode, lower upload speed, UART fallback port).
+See `docs/build.md` for recovery steps (BOOT+RESET manual download mode, lower upload speed, UART fallback port).
 
 ## Related Issues
 
-- `BUILD.md` — operational build/flash/recovery reference (source material for this doc)
+- `docs/build.md` — operational build/flash/recovery reference (source material for this doc)
 - `scripts/flash-bridge-s3.sh` — compile, upload, watchdog reset helper
 - `scripts/verify-boot.sh` — automated boot log verification
 - `scripts/wifi_log.py` — Wi-Fi UDP debug receiver (port 3333)
 - `read_serial.py` — serial log capture (close before flash)
-- `firmware/bridge-s3/README.md` — aligned with `BUILD.md` FQBN/flash workflow
+- `firmware/bridge-s3/README.md` — aligned with `docs/build.md` FQBN/flash workflow
 
 ## Status at documentation time
 

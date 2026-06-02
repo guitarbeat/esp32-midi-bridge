@@ -119,7 +119,7 @@ mode: repo-grounded
 
 **Axis:** Setup & persistence
 
-**Basis:** `external:` Thibak/PCh uses USB mass-storage `.cfg` editing; MorrisMakes hard-codes network in firmware; this repo already documents compile-time `BLE_DEVICE_NAME_TEXT` only (`BUILD.md`).
+**Basis:** `external:` Thibak/PCh uses USB mass-storage `.cfg` editing; MorrisMakes hard-codes network in firmware; this repo already documents compile-time `BLE_DEVICE_NAME_TEXT` only (`docs/build.md`).
 
 **Rationale:** Reduces support friction; pairs with CI artifacts for non-developers.
 

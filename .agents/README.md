@@ -1,21 +1,21 @@
 # Agent Resources
 
-Everything an AI coding agent needs for this repo lives here and in the root-level files below.
+Everything an AI coding agent needs for this repo lives here and in the docs below.
 
 ## Entry points
 
 | File | Role |
 |------|------|
-| [../AGENTS.md](../AGENTS.md) | **Start here** — role, architecture, build/verify, firmware scope, learned facts |
-| [../CONTEXT.md](../CONTEXT.md) | Shared vocabulary (domain + architecture language) |
-| [../BUILD.md](../BUILD.md) | Build, flash, recovery, Wi-Fi debug |
 | [../README.md](../README.md) | User-facing project overview |
+| [../docs/agent-instructions.md](../docs/agent-instructions.md) | **Start here** — role, architecture, build/verify, firmware scope, learned facts |
+| [../docs/context.md](../docs/context.md) | Shared vocabulary (domain + architecture language) |
+| [../docs/build.md](../docs/build.md) | Build, flash, recovery, Wi-Fi debug |
 
 ## Skills
 
 Project-specific skills live in `.agents/skills/`. Keep agent skills here rather
 than duplicating them in tool-specific folders; other agents should read this
-index and the root `AGENTS.md`.
+index and `docs/agent-instructions.md`.
 
 | Skill | Use when |
 |-------|----------|

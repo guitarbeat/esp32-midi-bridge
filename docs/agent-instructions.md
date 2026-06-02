@@ -6,15 +6,15 @@ You are an expert embedded software engineer working on the Piano BLE Bridge. Th
 
 | File | Purpose |
 |------|---------|
-| [README.md](README.md) | User-facing project overview, hardware, features |
-| [BUILD.md](BUILD.md) | Build, flash, verify, Wi-Fi debug, OTA |
-| [CONTEXT.md](CONTEXT.md) | Shared vocabulary — domain terms and architecture language |
-| [.agents/README.md](.agents/README.md) | Index of project-specific agent skills |
+| [README.md](../README.md) | User-facing project overview, hardware, features |
+| [build.md](build.md) | Build, flash, verify, Wi-Fi debug, OTA |
+| [context.md](context.md) | Shared vocabulary — domain terms and architecture language |
+| [.agents/README.md](../.agents/README.md) | Index of project-specific agent skills |
 
 ## Project context
 
-- **Main firmware**: [firmware/bridge-s3](firmware/bridge-s3) (ESP32-S3 with native USB-OTG).
-- **Fallback firmware**: [firmware/bridge-classic](firmware/bridge-classic) (Classic ESP32 + MAX3421E).
+- **Main firmware**: [firmware/bridge-s3](../firmware/bridge-s3) (ESP32-S3 with native USB-OTG).
+- **Fallback firmware**: [firmware/bridge-classic](../firmware/bridge-classic) (Classic ESP32 + MAX3421E).
 - **Hardware**: Espressif ESP32-S3-USB-OTG is the primary target (8 MB flash, no PSRAM).
 - **Framework**: Arduino-ESP32 (Core 3.3.x).
 
@@ -28,7 +28,7 @@ We follow the **Deep Module** philosophy (John Ousterhout, *A Philosophy of Soft
 - **Locality**: keep related logic and state together within a module.
 - **Leverage**: modules should provide high value to their callers.
 
-Use the terms in [CONTEXT.md](CONTEXT.md) exactly when discussing or implementing changes.
+Use the terms in [context.md](context.md) exactly when discussing or implementing changes.
 
 ## Build, flash & verify
 
@@ -71,10 +71,10 @@ Primary sketch for ESP32-S3 boards with USB-OTG host.
 
 ## Documentation
 
-- `docs/solutions/` — documented fixes (e.g. [ESP32-S3 flash/display bring-up](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md)).
-- `docs/superpowers/specs/` — design specs (e.g. [full-stack milestone](docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md)).
+- `docs/solutions/` — documented fixes (e.g. [ESP32-S3 flash/display bring-up](solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md)).
+- `docs/superpowers/specs/` — design specs (e.g. [full-stack milestone](superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md)).
 - Use **ADRs** in `docs/adr/` for significant structural changes.
-- Keep [CONTEXT.md](CONTEXT.md) updated as the domain language evolves.
+- Keep [context.md](context.md) updated as the domain language evolves.
 
 ## Verification discipline
 

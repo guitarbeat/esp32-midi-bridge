@@ -118,5 +118,5 @@ Adding `esp_ble_gap_register_callback()` plus `esp_ble_gap_read_rssi()` for RSSI
 ## Related
 
 - Root README: [Unplugging the Piano](../../../README.md) — BLE stays up on USB unplug
-- `BUILD.md` — on-board controls and unplug behavior
+- `docs/build.md` — on-board controls and unplug behavior
 - Ideation: [`docs/ideation/2026-05-29-github-repo-features-ideation.md`](../../ideation/2026-05-29-github-repo-features-ideation.md)

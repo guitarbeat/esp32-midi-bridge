@@ -26,7 +26,7 @@ The official Espressif **ESP32-S3-USB-OTG** development board is the primary tar
 
 ## Build and flash (ESP32-S3-USB-OTG)
 
-Use the board-specific FQBN from [BUILD.md](../../BUILD.md):
+Use the board-specific FQBN from [docs/build.md](../../docs/build.md):
 
 ```bash
 ./scripts/flash-bridge-s3.sh
@@ -40,11 +40,11 @@ Do **not** enable PSRAM on the ESP32-S3-USB-OTG board.
 
 **Init order:** `Board::begin()` brings up the LCD only. USB host power rails (GPIO 12/13/17/18) run later in `Board::enableUsbHostPower()`, called from `USBConnection::begin()` after the canvas is ready. Enabling host rails inside `Board::begin()` caused a reboot loop right after `[LCD] display->begin OK`.
 
-When USB host mode is active, native USB CDC may stop. Enable Wi-Fi debug logging (see [BUILD.md](../../BUILD.md)) and run `python3 scripts/wifi_log.py`.
+When USB host mode is active, native USB CDC may stop. Enable Wi-Fi debug logging (see [docs/build.md](../../docs/build.md)) and run `python3 scripts/wifi_log.py`.
 
 Design reference: [full-stack milestone design](../../docs/superpowers/specs/2026-05-31-bridge-full-stack-milestone-design.md).
 
-Agent instructions for this sketch: [AGENTS.md](../../AGENTS.md#firmware-bridge-s3).
+Agent instructions for this sketch: [agent instructions](../../docs/agent-instructions.md#firmware-bridge-s3).
 
 ## Test
 

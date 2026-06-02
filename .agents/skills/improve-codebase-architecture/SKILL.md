@@ -1,6 +1,6 @@
 ---
 name: improve-codebase-architecture
-description: Find deepening opportunities in a codebase, informed by the domain language in CONTEXT.md and the decisions in docs/adr/. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
+description: Find deepening opportunities in a codebase, informed by the domain language in docs/context.md and the decisions in docs/adr/. Use when the user wants to improve architecture, find refactoring opportunities, consolidate tightly-coupled modules, or make a codebase more testable and AI-navigable.
 ---
 
 # Improve Codebase Architecture
@@ -9,7 +9,7 @@ Surface architectural friction and propose **deepening opportunities** — refac
 
 ## Glossary
 
-Use these terms exactly in every suggestion. Consistent language is the point — don't drift into "component," "service," "API," or "boundary." Full definitions in [CONTEXT.md](../../../CONTEXT.md).
+Use these terms exactly in every suggestion. Consistent language is the point — don't drift into "component," "service," "API," or "boundary." Full definitions in [context.md](../../../docs/context.md).
 
 - **Module** — anything with an interface and an implementation (function, class, package, slice).
 - **Interface** — everything a caller must know to use the module: types, invariants, error modes, ordering, config. Not just the type signature.
@@ -20,7 +20,7 @@ Use these terms exactly in every suggestion. Consistent language is the point �
 - **Leverage** — what callers get from depth.
 - **Locality** — what maintainers get from depth: change, bugs, knowledge concentrated in one place.
 
-Key principles (see [CONTEXT.md](../../../CONTEXT.md) for the full list):
+Key principles (see [context.md](../../../docs/context.md) for the full list):
 
 - **Deletion test**: imagine deleting the module. If complexity vanishes, it was a pass-through. If complexity reappears across N callers, it was earning its keep.
 - **The interface is the test surface.**
@@ -61,7 +61,7 @@ For each candidate, the same template as before, but rendered as a card:
 
 End the report with a **Top recommendation** section: which candidate you'd tackle first and why.
 
-**Use [CONTEXT.md](../../../CONTEXT.md) for both domain and architecture vocabulary.** If `CONTEXT.md` defines "Transport," talk about "the Transport adapter" — not "the FooBarHandler," and not "the MIDI service."
+**Use [context.md](../../../docs/context.md) for both domain and architecture vocabulary.** If `context.md` defines "Transport," talk about "the Transport adapter" — not "the FooBarHandler," and not "the MIDI service."
 
 **ADR conflicts**: if a candidate contradicts an existing ADR, only surface it when the friction is real enough to warrant revisiting the ADR. Mark it clearly in the card (e.g. a warning callout: _"contradicts ADR-0007 — but worth reopening because…"_). Don't list every theoretical refactor an ADR forbids.
 
@@ -75,7 +75,7 @@ Once the user picks a candidate, drop into a grilling conversation. Walk the des
 
 Side effects happen inline as decisions crystallize:
 
-- **Naming a deepened module after a concept not in `CONTEXT.md`?** Add the term under **Domain specifics** in [CONTEXT.md](../../../CONTEXT.md).
-- **Sharpening a fuzzy term during the conversation?** Update `CONTEXT.md` right there.
+- **Naming a deepened module after a concept not in `context.md`?** Add the term under **Domain specifics** in [context.md](../../../docs/context.md).
+- **Sharpening a fuzzy term during the conversation?** Update `context.md` right there.
 - **User rejects the candidate with a load-bearing reason?** Offer an ADR in `docs/adr/NNNN-short-title.md` (Context, Decision, Consequences). Only offer when the reason would help a future explorer avoid re-suggesting the same thing.
 - **Want to explore alternative interfaces for the deepened module?** See [INTERFACE-DESIGN.md](INTERFACE-DESIGN.md).

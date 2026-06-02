@@ -36,7 +36,7 @@ flowchart TB
 - **`scripts/verify-boot.sh`**: waits for `usbmodem`, captures 15s serial, checks for LCD/canvas markers, rejects download mode and PSRAM errors.
 - **`scripts/flash-bridge-s3.sh`**: port-busy guard, post-flash `esptool run`.
 - **`read_serial.py`**: download-mode hints, `--reset`, DTR/RTS low.
-- Docs aligned in `BUILD.md` and `firmware/bridge-s3/README.md`.
+- Docs aligned in `docs/build.md` and `firmware/bridge-s3/README.md`.
 
 ## Phase 2 — USB host MIDI
 

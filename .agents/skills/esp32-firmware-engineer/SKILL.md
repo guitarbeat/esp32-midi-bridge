@@ -5,7 +5,7 @@ description: ESP32 embedded firmware engineering for this project — hardware t
 
 # ESP32 Firmware Engineer
 
-Embedded firmware skill for the Piano BLE Bridge. Read [AGENTS.md](../../../AGENTS.md) first for project-specific FQBN, pins, init order, and verification discipline.
+Embedded firmware skill for the Piano BLE Bridge. Read [agent-instructions.md](../../../docs/agent-instructions.md) first for project-specific FQBN, pins, init order, and verification discipline.
 
 ## This project's stack
 
@@ -35,7 +35,7 @@ Read [references/values.md](references/values.md) first. Key rules adapted for t
 
 ## Project-specific hardware facts
 
-See **Learned workspace facts** in [AGENTS.md](../../../AGENTS.md). Critical pins:
+See **Learned workspace facts** in [agent-instructions.md](../../../docs/agent-instructions.md). Critical pins:
 
 - LCD enable GPIO 5 (LOW), backlight GPIO 9.
 - USB host mux/power: GPIO 18/12/17/13 via `Board::enableUsbHostPower()`.

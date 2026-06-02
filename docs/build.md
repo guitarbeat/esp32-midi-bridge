@@ -12,15 +12,15 @@
 
 | Script | Purpose |
 |--------|---------|
-| [`scripts/flash-bridge-s3.sh`](scripts/flash-bridge-s3.sh) | Compile, upload, post-flash `esptool run`; checks port is free |
-| [`scripts/flash-bridge-s3-ota.sh`](scripts/flash-bridge-s3-ota.sh) | Compile and upload over Wi-Fi OTA after provisioning |
-| [`scripts/verify-boot.sh`](scripts/verify-boot.sh) | Capture boot log; verify LCD/canvas markers (`--flash` to flash first) |
-| [`read_serial.py`](read_serial.py) | Stream USB Serial/JTAG logs; `--reset` for watchdog reset; close before flash |
-| [`scripts/wifi_log.py`](scripts/wifi_log.py) | Receive Wi-Fi UDP debug logs on port 3333 (`ENABLE_WIFI_DEBUG=1`) |
-| [`scripts/probe-ble-midi.sh`](scripts/probe-ble-midi.sh) | macOS BLE MIDI probe; subscribes to bridge notifications and can send a test note |
-| [`scripts/run-hardware-diagnostics.sh`](scripts/run-hardware-diagnostics.sh) | Compile or flash/probe USB host rail diagnostic builds; writes ignored evidence logs |
-| [`scripts/analyze-hardware-diagnostics.py`](scripts/analyze-hardware-diagnostics.py) | Summarize hardware diagnostic logs into stage/rail/BLE/USB evidence lines |
-| [`scripts/test.sh`](scripts/test.sh) | Host-side unit tests |
+| [`scripts/flash-bridge-s3.sh`](../scripts/flash-bridge-s3.sh) | Compile, upload, post-flash `esptool run`; checks port is free |
+| [`scripts/flash-bridge-s3-ota.sh`](../scripts/flash-bridge-s3-ota.sh) | Compile and upload over Wi-Fi OTA after provisioning |
+| [`scripts/verify-boot.sh`](../scripts/verify-boot.sh) | Capture boot log; verify LCD/canvas markers (`--flash` to flash first) |
+| [`read_serial.py`](../read_serial.py) | Stream USB Serial/JTAG logs; `--reset` for watchdog reset; close before flash |
+| [`scripts/wifi_log.py`](../scripts/wifi_log.py) | Receive Wi-Fi UDP debug logs on port 3333 (`ENABLE_WIFI_DEBUG=1`) |
+| [`scripts/probe-ble-midi.sh`](../scripts/probe-ble-midi.sh) | macOS BLE MIDI probe; subscribes to bridge notifications and can send a test note |
+| [`scripts/run-hardware-diagnostics.sh`](../scripts/run-hardware-diagnostics.sh) | Compile or flash/probe USB host rail diagnostic builds; writes ignored evidence logs |
+| [`scripts/analyze-hardware-diagnostics.py`](../scripts/analyze-hardware-diagnostics.py) | Summarize hardware diagnostic logs into stage/rail/BLE/USB evidence lines |
+| [`scripts/test.sh`](../scripts/test.sh) | Host-side unit tests |
 
 **Standard FQBN** (use everywhere for ESP32-S3-USB-OTG):
 
@@ -100,7 +100,7 @@ notifications on the BLE MIDI characteristic, which is useful for
 using the USB port. A background serial reader causes uploads to fail around
 80–280 KB with errors like “chip stopped responding” or “serial data stream stopped”.
 
-See also: [ESP32-S3 flash/display bring-up troubleshooting](docs/solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md).
+See also: [ESP32-S3 flash/display bring-up troubleshooting](solutions/integration-issues/esp32-s3-usb-otg-flash-display-bringup.md).
 
 ### Boot verification checklist
 
@@ -219,7 +219,7 @@ and verify it appears in **Audio MIDI Setup -> MIDI Studio**. An F-20 observed a
 **Roland Digital Piano** on macOS reports `VID:PID 0582:0122`; the S3 firmware
 accepts that Roland vendor interface and falls back to byte-stream MIDI decoding
 if standard USB-MIDI event packets are not present. See
-[`docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md`](docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).
+[`docs/solutions/integration-issues/roland-f20-usb-midi-diagnostics.md`](solutions/integration-issues/roland-f20-usb-midi-diagnostics.md).
 
 ### Prebuilt binary
 
