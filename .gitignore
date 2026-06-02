@@ -17,6 +17,9 @@ __pycache__/
 build/
 dist/
 site/
+!site/
+site/*
+!site/index.html
 firmware/**/build/
 /build-s3/
 
