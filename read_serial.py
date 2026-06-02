@@ -6,7 +6,11 @@ import os
 import shutil
 import subprocess
 import sys
+import termios
 import time
+from functools import partial
+
+print = partial(print, flush=True)
 
 try:
     import serial
@@ -42,7 +46,10 @@ def open_port(path: str) -> serial.Serial:
     # Keep DTR/RTS low so we do not accidentally enter download mode.
     ser.dtr = False
     ser.rts = False
-    ser.open()
+    try:
+        ser.open()
+    except (OSError, termios.error) as exc:
+        raise SerialException(f"could not open port {path}: {exc}") from exc
     return ser
 
 
@@ -114,7 +121,10 @@ def main() -> None:
             with open_port(port) as ser:
                 print("Connected.")
                 while True:
-                    line = ser.readline()
+                    try:
+                        line = ser.readline()
+                    except (OSError, termios.error) as exc:
+                        raise SerialException(f"serial device disconnected: {exc}") from exc
                     if not line:
                         continue
                     text = line.decode("utf-8", errors="replace").strip()

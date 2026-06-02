@@ -4,6 +4,10 @@
 #include "BridgeLog.h"
 #include "MidiCodec.h"
 
+#ifndef ENABLE_BLE_SUBSCRIBE_TEST
+#define ENABLE_BLE_SUBSCRIBE_TEST 0
+#endif
+
 void BLEConnection::processIncomingBlePacket(const uint8_t* data, size_t length)
 {
     if (data == nullptr || length < 3 || !(data[0] & 0x80)) {
@@ -115,14 +119,21 @@ void BLEConnection::begin(const std::string& deviceName) {
             }
         }
 
-#if defined(CONFIG_NIMBLE_ENABLED)
         void onSubscribe(BLECharacteristic*, ble_gap_conn_desc*, uint16_t subValue) override {
             bleCon->setSubscribed(subValue > 0);
             BRIDGE_LOG("[BLE] MIDI notify subscription %s (value=%u)\n",
                        subValue > 0 ? "enabled" : "disabled",
                        subValue);
-        }
+#if ENABLE_BLE_SUBSCRIBE_TEST
+            if (subValue > 0) {
+                const uint8_t noteOn[] = {0x90, 60, 100};
+                const uint8_t noteOff[] = {0x80, 60, 0};
+                bleCon->sendMidi(noteOn, sizeof(noteOn));
+                vTaskDelay(pdMS_TO_TICKS(80));
+                bleCon->sendMidi(noteOff, sizeof(noteOff));
+            }
 #endif
+        }
     };
 
     delete pBleCallback;
@@ -157,6 +168,21 @@ bool BLEConnection::sendMidi(const uint8_t* data, size_t length) {
 
     xSemaphoreGive(sendMutex);
     return sent;
+}
+
+bool BLEConnection::sendDebugText(const char* text) {
+    if (!pCharacteristic || !sendMutex || text == nullptr || !isSubscribed()) return false;
+
+    const size_t length = strnlen(text, 180);
+    if (length == 0) return false;
+
+    if (xSemaphoreTake(sendMutex, pdMS_TO_TICKS(100)) != pdTRUE) return false;
+
+    pCharacteristic->setValue(reinterpret_cast<const uint8_t*>(text), length);
+    pCharacteristic->notify();
+
+    xSemaphoreGive(sendMutex);
+    return true;
 }
 
 void BLEConnection::recordForwardLatency(uint32_t latencyMs)

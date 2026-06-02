@@ -13,9 +13,11 @@
 | Script | Purpose |
 |--------|---------|
 | [`scripts/flash-bridge-s3.sh`](scripts/flash-bridge-s3.sh) | Compile, upload, post-flash `esptool run`; checks port is free |
+| [`scripts/flash-bridge-s3-ota.sh`](scripts/flash-bridge-s3-ota.sh) | Compile and upload over Wi-Fi OTA after provisioning |
 | [`scripts/verify-boot.sh`](scripts/verify-boot.sh) | Capture boot log; verify LCD/canvas markers (`--flash` to flash first) |
 | [`read_serial.py`](read_serial.py) | Stream USB Serial/JTAG logs; `--reset` for watchdog reset; close before flash |
 | [`scripts/wifi_log.py`](scripts/wifi_log.py) | Receive Wi-Fi UDP debug logs on port 3333 (`ENABLE_WIFI_DEBUG=1`) |
+| [`scripts/probe-ble-midi.sh`](scripts/probe-ble-midi.sh) | macOS BLE MIDI probe; subscribes to bridge notifications and can send a test note |
 | [`scripts/test.sh`](scripts/test.sh) | Host-side unit tests |
 
 **Standard FQBN** (use everywhere for ESP32-S3-USB-OTG):
@@ -75,6 +77,23 @@ below.
 ./scripts/flash-bridge-s3.sh
 ```
 
+The flash helper uploads the exact binary it just compiled. Optional local
+defines can be passed with `BUILD_DEFINES`:
+
+```bash
+BUILD_DEFINES='ENABLE_BLE_DIAGNOSTICS=1' ./scripts/flash-bridge-s3.sh
+```
+
+To verify the exact helper build without uploading:
+
+```bash
+COMPILE_ONLY=1 BUILD_DEFINES='ENABLE_BLE_DIAGNOSTICS=1' ./scripts/flash-bridge-s3.sh
+```
+
+Use this for short diagnostic sessions only. BLE diagnostics send text
+notifications on the BLE MIDI characteristic, which is useful for
+`scripts/probe-ble-midi.sh` but not appropriate for normal DAW use.
+
 **Before uploading:** close Serial Monitor, `read_serial.py`, and any other app
 using the USB port. A background serial reader causes uploads to fail around
 80–280 KB with errors like “chip stopped responding” or “serial data stream stopped”.
@@ -116,6 +135,51 @@ python3 scripts/wifi_log.py
 ```
 
 USB/BLE/SYSTEM log lines that use `BRIDGE_LOG` in firmware are mirrored over UDP when Wi-Fi is connected.
+
+### BLE-first USB host startup
+
+`bridge-s3` starts BLE advertising before enabling USB host rails. By default it
+waits up to 15 seconds for a BLE MIDI notify subscription before starting USB
+host mode; if no BLE client subscribes, USB host starts after the timeout so the
+bridge still works standalone. This avoids the observed ESP32-S3-USB-OTG failure
+mode where starting USB host immediately leaves the BLE peripheral advertising
+but unable to complete a macOS CoreBluetooth connection.
+
+For diagnosis, tune the window with:
+
+```bash
+BUILD_DEFINES='USB_HOST_DEFER_UNTIL_BLE_SUBSCRIBE_MS=30000 ENABLE_BLE_DIAGNOSTICS=1' \
+  ./scripts/flash-bridge-s3.sh
+```
+
+After flashing that build, run the probe within the defer window:
+
+```bash
+./scripts/probe-ble-midi.sh --duration 60
+```
+
+Expected sequence: `Discovered`, `Connecting`, `Connected`, `Subscribing`,
+`Notify subscribed=true`, then periodic `DIAG USB ...` lines after USB host
+starts. If connection succeeds before USB host starts but times out immediately
+after USB host starts, continue investigating USB host mux/power and scheduler
+interaction.
+
+USB host startup isolation defines:
+
+```bash
+# Install USB host without switching board host rails/mux.
+BUILD_DEFINES='ENABLE_BLE_DIAGNOSTICS=1 USB_HOST_ENABLE_POWER_RAILS=0' \
+  ./scripts/flash-bridge-s3.sh
+
+# Switch only USB_SEL GPIO 18 after BLE subscribe.
+BUILD_DEFINES='ENABLE_BLE_DIAGNOSTICS=1 USB_HOST_DEFER_UNTIL_BLE_SUBSCRIBE_MS=30000 USB_HOST_START_AFTER_BLE_SUBSCRIBE_DELAY_MS=5000 USB_HOST_ENABLE_SEL=1 USB_HOST_ENABLE_VBUS=0 USB_HOST_ENABLE_LIMIT=0 USB_HOST_ENABLE_BOOST=0' \
+  ./scripts/flash-bridge-s3.sh
+```
+
+Observed so far: BLE stayed connected and emitted diagnostics when USB host was
+installed with `USB_HOST_ENABLE_POWER_RAILS=0`. BLE timed out when the normal
+host rails/mux path was enabled, so the next isolation step is GPIO 18
+(`USB_SEL`) by itself, then VBUS/limit/boost without SEL.
 
 ### Roland F-20 debugging note
 
@@ -208,6 +272,20 @@ the MIDI app's Bluetooth MIDI device list and connect there.
 
 Backlight dims after the configured idle period; any MIDI activity wakes it.
 
+### BLE MIDI probe
+
+On macOS, use the local probe script to test the bridge without opening a DAW:
+
+```bash
+./scripts/probe-ble-midi.sh --duration 30
+./scripts/probe-ble-midi.sh --duration 15 --send-note
+```
+
+The first command subscribes to BLE MIDI notifications; play notes on the piano and
+watch for `MIDI_NOTIFY` lines. The second also sends two middle-C notes from the Mac
+through BLE to the bridge, which tests the reverse path to USB MIDI OUT when the
+keyboard exposes one.
+
 ### Custom BLE name
 
 ```bash
@@ -247,6 +325,13 @@ When the board is on your WiFi (after RTP setup), you can flash new firmware **w
 3. Upload from this repo:
 
 ```bash
+# Helper script (default target: esp32-midi-bridge.local)
+./scripts/flash-bridge-s3-ota.sh
+
+# Or choose a hostname/IP explicitly
+./scripts/flash-bridge-s3-ota.sh piano-ble-bridge.local
+./scripts/flash-bridge-s3-ota.sh 192.168.1.42
+
 # By mDNS hostname (macOS usually resolves .local)
 arduino-cli upload \
   -p piano-ble-bridge.local \
@@ -263,7 +348,11 @@ arduino-cli upload \
 4. `arduino-cli board list` may also show a **network port** for the ESP32 when OTA is advertising.
 
 Optional OTA password: copy `ota_secrets.example.h` to `ota_secrets.h` and set `OTA_PASSWORD_TEXT`, then pass
-`--upload-property upload.password=YourPassword` on upload.
+`--upload-property upload.password=YourPassword` on upload, or run the helper with:
+
+```bash
+OTA_PASSWORD_TEXT='YourPassword' ./scripts/flash-bridge-s3-ota.sh 192.168.1.42
+```
 
 Disable OTA with `#define ENABLE_OTA 0` in `RTPMidiConfig.h` (RTP/BLE still work).
 

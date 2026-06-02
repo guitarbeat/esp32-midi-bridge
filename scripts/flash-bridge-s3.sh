@@ -5,9 +5,75 @@ set -euo pipefail
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 FQBN='esp32:esp32:esp32s3usbotg:PartitionScheme=default_8MB,USBMode=hwcdc'
 PORT="${1:-}"
+BUILD_DEFINES="${BUILD_DEFINES:-}"
+COMPILE_ONLY="${COMPILE_ONLY:-0}"
+UPLOAD_RETRIES="${UPLOAD_RETRIES:-3}"
+if [[ -z "${BUILD_PATH:-}" ]]; then
+  BUILD_PATH="$ROOT/firmware/bridge-s3/build/arduino-cli"
+fi
+mkdir -p "$BUILD_PATH"
+
+LOCAL_BUILD_CONFIG="$ROOT/firmware/bridge-s3/LocalBuildConfig.h"
+LOCAL_BUILD_CONFIG_BACKUP=""
+restore_local_build_config() {
+  if [[ -n "$LOCAL_BUILD_CONFIG_BACKUP" && -e "$LOCAL_BUILD_CONFIG_BACKUP" ]]; then
+    mv "$LOCAL_BUILD_CONFIG_BACKUP" "$LOCAL_BUILD_CONFIG"
+  elif [[ -n "$BUILD_DEFINES" ]]; then
+    rm -f "$LOCAL_BUILD_CONFIG"
+  fi
+}
+trap restore_local_build_config EXIT
+
+write_local_build_config() {
+  if [[ -z "$BUILD_DEFINES" ]]; then
+    return
+  fi
+
+  if [[ -e "$LOCAL_BUILD_CONFIG" ]]; then
+    LOCAL_BUILD_CONFIG_BACKUP="$(mktemp "${TMPDIR:-/tmp}/LocalBuildConfig.XXXXXX")"
+    cp "$LOCAL_BUILD_CONFIG" "$LOCAL_BUILD_CONFIG_BACKUP"
+  fi
+
+  {
+    echo "#ifndef LOCAL_BUILD_CONFIG_H"
+    echo "#define LOCAL_BUILD_CONFIG_H"
+    for define in $BUILD_DEFINES; do
+      define="${define#-D}"
+      if [[ "$define" == *=* ]]; then
+        echo "#define ${define%%=*} ${define#*=}"
+      else
+        echo "#define $define 1"
+      fi
+    done
+    echo "#endif  // LOCAL_BUILD_CONFIG_H"
+  } > "$LOCAL_BUILD_CONFIG"
+}
+
+find_upload_port() {
+  arduino-cli board list | awk '/usbmodem/ {print $1; exit}'
+}
+
+wait_for_upload_port() {
+  local timeout="${1:-30}"
+  local start
+  start="$(date +%s)"
+
+  while true; do
+    PORT="$(find_upload_port)"
+    if [[ -n "$PORT" && -e "$PORT" ]]; then
+      return 0
+    fi
+
+    if (( "$(date +%s)" - start >= timeout )); then
+      return 1
+    fi
+
+    sleep 1
+  done
+}
 
 if [[ -z "$PORT" ]]; then
-  PORT="$(arduino-cli board list | awk '/usbmodem/ {print $1; exit}')"
+  wait_for_upload_port 10 || true
 fi
 
 if [[ -z "$PORT" ]]; then
@@ -29,14 +95,57 @@ fi
 
 echo "Port: $PORT"
 echo "Compiling ($FQBN)..."
-arduino-cli compile --fqbn "$FQBN" "$ROOT/firmware/bridge-s3"
+if [[ -n "$BUILD_DEFINES" ]]; then
+  echo "Build defines: $BUILD_DEFINES"
+fi
+write_local_build_config
+compile_args=(compile --fqbn "$FQBN" --build-path "$BUILD_PATH")
+arduino-cli "${compile_args[@]}" "$ROOT/firmware/bridge-s3"
+
+if [[ "$COMPILE_ONLY" == "1" ]]; then
+  echo "Compile-only mode complete. Build path: $BUILD_PATH"
+  exit 0
+fi
+
+if [[ ! -e "$PORT" ]]; then
+  echo "Waiting for upload port to reappear..."
+  wait_for_upload_port 30 || {
+    echo "No /dev/cu.usbmodem* port found. Hold BOOT while reconnecting USB, then retry." >&2
+    exit 1
+  }
+  echo "Port: $PORT"
+fi
 
 echo "Uploading..."
-arduino-cli upload -p "$PORT" --fqbn "$FQBN" "$ROOT/firmware/bridge-s3"
+upload_ok=0
+for attempt in $(seq 1 "$UPLOAD_RETRIES"); do
+  if [[ ! -e "$PORT" ]]; then
+    echo "Waiting for upload port to reappear..."
+    wait_for_upload_port 30 || true
+  fi
+
+  if [[ -z "$PORT" || ! -e "$PORT" ]]; then
+    echo "Upload attempt $attempt/$UPLOAD_RETRIES: no upload port."
+  else
+    echo "Upload attempt $attempt/$UPLOAD_RETRIES on $PORT..."
+    if arduino-cli upload -p "$PORT" --fqbn "$FQBN" --input-dir "$BUILD_PATH" "$ROOT/firmware/bridge-s3"; then
+      upload_ok=1
+      break
+    fi
+  fi
+
+  sleep 2
+  PORT="$(find_upload_port)"
+done
+
+if [[ "$upload_ok" != "1" ]]; then
+  echo "Upload failed. Hold BOOT while reconnecting USB, then rerun this command." >&2
+  exit 1
+fi
 
 echo "Waiting for USB reconnect..."
 sleep 4
-PORT="$(arduino-cli board list | awk '/usbmodem/ {print $1; exit}')"
+PORT="$(find_upload_port)"
 if [[ -n "$PORT" ]]; then
   echo "Starting flashed app (watchdog reset) on $PORT..."
   # Use `run`, not chip-id — chip-id uploads the stub and often re-enters download mode.

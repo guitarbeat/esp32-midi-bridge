@@ -47,3 +47,4 @@ docs/
 # Local Wi-Fi credentials for optional RTP-MIDI builds
 firmware/bridge-s3/wifi_secrets.h
 firmware/bridge-s3/ota_secrets.h
+firmware/bridge-s3/LocalBuildConfig.h

@@ -1,4 +1,5 @@
 #include "Board.h"
+#include "BuildConfig.h"
 
 /**
  * @brief Implementation for the ESP32-S3-USB-OTG board.
@@ -80,14 +81,22 @@ public:
     void enableUsbHostPower() override {
         Serial.println("[USB] Enabling host power rails...");
         Serial.flush();
+#if USB_HOST_ENABLE_SEL
         pinMode(18 /* SEL */, OUTPUT);
         digitalWrite(18, HIGH);
+#endif
+#if USB_HOST_ENABLE_VBUS
         pinMode(12 /* VBUS */, OUTPUT);
         digitalWrite(12, HIGH);
+#endif
+#if USB_HOST_ENABLE_LIMIT
         pinMode(17 /* LIMIT */, OUTPUT);
         digitalWrite(17, HIGH);
+#endif
+#if USB_HOST_ENABLE_BOOST
         pinMode(13 /* BOOST */, OUTPUT);
         digitalWrite(13, LOW);
+#endif
         delay(500);
         Serial.println("[USB] Host power rails stable.");
         Serial.flush();

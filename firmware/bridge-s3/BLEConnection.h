@@ -39,6 +39,7 @@ public:
     bool isSubscribed() const { return subscribed_; }
     bool isPrimaryOutbound() const override { return true; }
     bool sendMidi(const uint8_t* data, size_t length) override;
+    bool sendDebugText(const char* text);
 
     uint16_t getAverageLatencyMs() const { return avgLatencyMs_; }
     void recordForwardLatency(uint32_t latencyMs);

@@ -55,6 +55,7 @@ public:
     uint8_t getMidiOutEndpoint() const { return midiOutEndpoint_; }
     uint8_t getClaimedInterfaceClass() const { return claimedInterfaceClass_; }
     uint8_t getClaimedInterfaceSubClass() const { return claimedInterfaceSubClass_; }
+    const String& getDescriptorSummary() const { return descriptorSummary_; }
     int8_t getMidiInterfaceNumber() const { return midiInterfaceNumber; }
     bool isVendorByteStreamMode() const { return vendorByteStreamMode_; }
     uint8_t getLastUsbByte(uint8_t index) const { return index < sizeof(lastUsbBytes_) ? lastUsbBytes_[index] : 0; }
@@ -103,11 +104,16 @@ protected:
     uint8_t midiOutEndpoint_;
     uint8_t claimedInterfaceClass_;
     uint8_t claimedInterfaceSubClass_;
+    uint8_t fallbackInterfaceNumber_;
+    uint8_t fallbackAlternateSetting_;
+    uint8_t fallbackInEndpoint_;
+    uint8_t fallbackOutEndpoint_;
     uint8_t lastUsbBytes_[8];
     volatile uint8_t lastUsbByteCount_;
     bool vendorByteStreamMode_;
     String deviceName;
     String lastError;
+    String descriptorSummary_;
     Board* board_;
 
     bool enqueueMidiMessage(const uint8_t* data, size_t length);

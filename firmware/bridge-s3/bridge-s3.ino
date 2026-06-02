@@ -15,6 +15,7 @@
 #include "BridgeSystem.h"
 #include "MidiBridge.h"
 #include "BridgeUi.h"
+#include "BuildConfig.h"
 
 // System Components — canvas allocated at static init (115 KB) while heap is clean.
 static Board* board = createBoard();
@@ -23,6 +24,26 @@ static Arduino_Canvas* canvas = new Arduino_Canvas(240, 240, board->getDisplay()
 static USBConnection usbMidi;
 static BLEConnection bleMidi;
 static UartConnection uartMidi(Serial2, 48 /* RX */, 47 /* TX */);
+
+#if ENABLE_BLE_DIAGNOSTICS
+static uint32_t lastBleDiagMs = 0;
+#endif
+
+static bool usbHostStarted = false;
+static uint32_t transportsStartedMs = 0;
+static uint32_t bleSubscribedAtMs = 0;
+
+static void startUsbHost()
+{
+    if (usbHostStarted) {
+        return;
+    }
+
+    usbHostStarted = true;
+    if (!usbMidi.begin(board)) {
+        BRIDGE_LOG_LN("[USB] Host init failed — check VBUS / USB_DEV power");
+    }
+}
 
 static BridgeUiRouteStats toUiStats(const MidiBridge::RouteStats& stats)
 {
@@ -106,15 +127,14 @@ void setup()
     }
     midiBridge.addTransport(&connectivityManager);
 
-    // 6. Start Transports (USB host rails switch PHY after usb_host_install)
-    if (!usbMidi.begin(board)) {
-        BRIDGE_LOG_LN("[USB] Host init failed — check VBUS / USB_DEV power");
-    }
+    // 6. Start Transports. BLE starts first so a central can subscribe before
+    // USB host muxing disrupts native USB CDC or BLE connection setup.
     bleMidi.begin(bridgeSystem.settings().bleDeviceName());
     if (bridgeSystem.settings().uartEnabled()) {
         uartMidi.begin(bridgeSystem.settings().uartBaudRate());
     }
     connectivityManager.begin();
+    transportsStartedMs = millis();
 
     Serial.println("[SYSTEM] Deep Controller architecture initialized.");
 }
@@ -132,6 +152,46 @@ void loop()
     bleMidi.task();
     uartMidi.task();
     connectivityManager.task();
+
+    if (bleMidi.isSubscribed() && bleSubscribedAtMs == 0) {
+        bleSubscribedAtMs = now;
+    } else if (!bleMidi.isSubscribed()) {
+        bleSubscribedAtMs = 0;
+    }
+
+    const bool bleSubscriptionDelayElapsed =
+        bleSubscribedAtMs != 0 &&
+        (now - bleSubscribedAtMs) >= USB_HOST_START_AFTER_BLE_SUBSCRIBE_DELAY_MS;
+
+    if ((bleMidi.isSubscribed() && bleSubscriptionDelayElapsed) ||
+        (USB_HOST_DEFER_UNTIL_BLE_SUBSCRIBE_MS == 0) ||
+        (!usbHostStarted && (now - transportsStartedMs) >= USB_HOST_DEFER_UNTIL_BLE_SUBSCRIBE_MS)) {
+        startUsbHost();
+    }
+
+#if ENABLE_BLE_DIAGNOSTICS
+    if (bleMidi.isSubscribed() && (now - lastBleDiagMs) >= 1000) {
+        lastBleDiagMs = now;
+        char diag[180];
+        snprintf(diag, sizeof(diag),
+                 "DIAG USB seen=%u ready=%u canOut=%u vid=%04X pid=%04X if=%d in=%02X out=%02X raw=%lu midi=%lu drops=%lu mode=%c err=%.32s desc=%.72s",
+                 usbMidi.hasSeenDevice() ? 1 : 0,
+                 usbMidi.isConnected() ? 1 : 0,
+                 usbMidi.canSend() ? 1 : 0,
+                 usbMidi.getVendorId(),
+                 usbMidi.getProductId(),
+                 usbMidi.getMidiInterfaceNumber(),
+                 usbMidi.getMidiInEndpoint(),
+                 usbMidi.getMidiOutEndpoint(),
+                 usbMidi.getRawUsbPacketsSeen(),
+                 usbMidi.getDecodedMidiPacketsSeen(),
+                 usbMidi.getDecodeDropCount(),
+                 usbMidi.isVendorByteStreamMode() ? 'S' : 'P',
+                 usbMidi.getLastError().c_str(),
+                 usbMidi.getDescriptorSummary().c_str());
+        bleMidi.sendDebugText(diag);
+    }
+#endif
     
     // UI Refresh
     if (canvas != nullptr) {

@@ -1,5 +1,6 @@
 #include "USBConnection.h"
 #include "Board.h"
+#include "BuildConfig.h"
 #include "BridgeLog.h"
 #include "MidiCodec.h"
 
@@ -39,11 +40,16 @@ String utf16DescriptorToAscii(const usb_str_desc_t* desc)
 #define USB_LOG_LN(msg) ((void)0)
 #endif
 
+#ifndef USB_MIDI_TASK_PRIORITY
+#define USB_MIDI_TASK_PRIORITY 4
+#endif
+
 }  // namespace
 
 void USBConnection::loadDeviceInfo()
 {
     deviceName = "";
+    descriptorSummary_ = "";
     vendorId_ = 0;
     productId_ = 0;
     if (deviceHandle == nullptr) {
@@ -104,6 +110,10 @@ USBConnection::USBConnection()
     midiOutEndpoint_(0),
     claimedInterfaceClass_(0),
     claimedInterfaceSubClass_(0),
+    fallbackInterfaceNumber_(0xFF),
+    fallbackAlternateSetting_(0),
+    fallbackInEndpoint_(0),
+    fallbackOutEndpoint_(0),
     lastUsbBytes_{0},
     lastUsbByteCount_(0),
     vendorByteStreamMode_(false),
@@ -135,9 +145,11 @@ bool USBConnection::begin(Board* board)
         return false;
     }
 
-    if (board_ != nullptr) {
+    if (board_ != nullptr && USB_HOST_ENABLE_POWER_RAILS) {
         board_->enableUsbHostPower();
         BRIDGE_LOG_LN("[USB] Host power rails enabled (USB_SEL/VBUS)");
+    } else if (!USB_HOST_ENABLE_POWER_RAILS) {
+        BRIDGE_LOG_LN("[USB] Host power rails intentionally disabled by build config");
     }
 
     usb_host_client_config_t client_config = {
@@ -154,7 +166,7 @@ bool USBConnection::begin(Board* board)
         return false;
     }
 
-    xTaskCreatePinnedToCore(_usbTask, "usb_midi", 4096, this, 11, &usbTaskHandle, 0);
+    xTaskCreatePinnedToCore(_usbTask, "usb_midi", 4096, this, USB_MIDI_TASK_PRIORITY, &usbTaskHandle, 0);
 
     lastError = "";
     BRIDGE_LOG_LN("[USB] Host initialized");
@@ -217,6 +229,10 @@ void USBConnection::handleDeviceRemoved()
     midiOutEndpoint_ = 0;
     claimedInterfaceClass_ = 0;
     claimedInterfaceSubClass_ = 0;
+    fallbackInterfaceNumber_ = 0xFF;
+    fallbackAlternateSetting_ = 0;
+    fallbackInEndpoint_ = 0;
+    fallbackOutEndpoint_ = 0;
     memset(lastUsbBytes_, 0, sizeof(lastUsbBytes_));
     lastUsbByteCount_ = 0;
     vendorByteStreamMode_ = false;
@@ -717,8 +733,10 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
     bool vendorModeSeen = false;
     const usb_intf_desc_t* knownDeviceFallbackInterface = nullptr;
     uint16_t knownDeviceFallbackIndex = 0;
+    bool collectingKnownDeviceFallback = false;
 
     BRIDGE_LOG("[USB] Scanning %d bytes of descriptors...\n", totalLength);
+    descriptorSummary_ = "";
     if (_isKnownVendorMidiDevice()) {
         BRIDGE_LOG_LN("[USB] Roland F-20 VID/PID matched; accepting vendor MIDI interface.");
     }
@@ -737,16 +755,33 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
 
         if (descriptorType == USB_B_DESCRIPTOR_TYPE_INTERFACE) {
             const auto* intf = reinterpret_cast<const usb_intf_desc_t*>(&p[index]);
+            collectingKnownDeviceFallback = false;
+            if (descriptorSummary_.length() < 180) {
+                char part[40];
+                snprintf(part, sizeof(part), " I%dA%dC%02XS%02XE%d",
+                         intf->bInterfaceNumber,
+                         intf->bAlternateSetting,
+                         intf->bInterfaceClass,
+                         intf->bInterfaceSubClass,
+                         intf->bNumEndpoints);
+                descriptorSummary_ += part;
+            }
             BRIDGE_LOG("[USB] Found Interface %d alt %d: Class 0x%02X, SubClass 0x%02X, Endpoints %d\n",
                        intf->bInterfaceNumber, intf->bAlternateSetting,
                        intf->bInterfaceClass, intf->bInterfaceSubClass, intf->bNumEndpoints);
 
             const bool knownVendorMidi = _isKnownVendorMidiInterface(intf);
             if (_isKnownVendorMidiDevice() &&
+                _isMidiInterface(intf) &&
                 intf->bNumEndpoints > 0 &&
                 knownDeviceFallbackInterface == nullptr) {
                 knownDeviceFallbackInterface = intf;
                 knownDeviceFallbackIndex = index + len;
+                fallbackInterfaceNumber_ = intf->bInterfaceNumber;
+                fallbackAlternateSetting_ = intf->bAlternateSetting;
+                fallbackInEndpoint_ = 0;
+                fallbackOutEndpoint_ = 0;
+                collectingKnownDeviceFallback = true;
             }
             if (intf->bInterfaceClass == 0xFF && intf->bNumEndpoints > 0) {
                 vendorModeSeen = true;
@@ -771,6 +806,26 @@ void USBConnection::_parseConfig(const usb_config_desc_t* config_desc)
                     claimedOk = true;
                     break;
                 }
+            }
+        } else if (descriptorType == USB_B_DESCRIPTOR_TYPE_ENDPOINT) {
+            const auto* ep = reinterpret_cast<const usb_ep_desc_t*>(&p[index]);
+            if (collectingKnownDeviceFallback) {
+                const uint8_t transferType = ep->bmAttributes & USB_BM_ATTRIBUTES_XFERTYPE_MASK;
+                if (transferType == USB_BM_ATTRIBUTES_XFER_BULK) {
+                    if (ep->bEndpointAddress & USB_B_ENDPOINT_ADDRESS_EP_DIR_MASK) {
+                        fallbackInEndpoint_ = ep->bEndpointAddress;
+                    } else {
+                        fallbackOutEndpoint_ = ep->bEndpointAddress;
+                    }
+                }
+            }
+            if (descriptorSummary_.length() < 180) {
+                char part[28];
+                snprintf(part, sizeof(part), " E%02XA%02XM%d",
+                         ep->bEndpointAddress,
+                         ep->bmAttributes,
+                         ep->wMaxPacketSize);
+                descriptorSummary_ += part;
             }
         }
 
@@ -838,7 +893,7 @@ void USBConnection::_setupMidiInEndpoint(const usb_ep_desc_t* endpoint)
             continue;
         }
 
-        esp_err_t err = usb_host_transfer_alloc(wMaxPacketSize, 3000, &midiInTransfers[i]);
+        esp_err_t err = usb_host_transfer_alloc(wMaxPacketSize, 0, &midiInTransfers[i]);
         if (err != ESP_OK || midiInTransfers[i] == nullptr) {
             lastError = "MIDI IN alloc failed (err=" + String(err) + ")";
             return;
@@ -872,7 +927,7 @@ void USBConnection::_setupMidiOutEndpoint(const usb_ep_desc_t* endpoint)
         wMaxPacketSize = 64;
     }
 
-    const esp_err_t err = usb_host_transfer_alloc(wMaxPacketSize, 3000, &outTransfer);
+    const esp_err_t err = usb_host_transfer_alloc(wMaxPacketSize, 0, &outTransfer);
     if (err != ESP_OK || outTransfer == nullptr) {
         return;
     }
@@ -913,23 +968,69 @@ bool USBConnection::_tryEndpointFallback()
 {
     BRIDGE_LOG_LN("[USB] MIDI descriptors not found. Attempting aggressive fallback (Endpoint 0x81)...");
 
-    esp_err_t err = usb_host_transfer_alloc(64, 3000, &midiInTransfers[0]);
+    const bool useKnownDeviceFallback = _isKnownVendorMidiDevice() &&
+                                        fallbackInterfaceNumber_ != 0xFF &&
+                                        fallbackInEndpoint_ != 0;
+    const uint8_t fallbackInEndpoint = useKnownDeviceFallback ? fallbackInEndpoint_ : 0x81;
+    const uint8_t fallbackOutEndpoint = useKnownDeviceFallback ? fallbackOutEndpoint_ : 0x00;
+
+    if (useKnownDeviceFallback) {
+        const esp_err_t claimErr = usb_host_interface_claim(clientHandle,
+                                                            deviceHandle,
+                                                            fallbackInterfaceNumber_,
+                                                            fallbackAlternateSetting_);
+        if (claimErr != ESP_OK) {
+            lastError = "Fallback claim failed (if=" + String(fallbackInterfaceNumber_) +
+                        " err=" + String(claimErr) + ")";
+            BRIDGE_LOG("[USB] %s\n", lastError.c_str());
+            return false;
+        }
+        midiInterfaceNumber = static_cast<int8_t>(fallbackInterfaceNumber_);
+        midiAlternateSetting_ = static_cast<int8_t>(fallbackAlternateSetting_);
+        claimedInterfaceClass_ = USB_CLASS_AUDIO;
+        claimedInterfaceSubClass_ = 0x03;
+    }
+
+    esp_err_t err = usb_host_transfer_alloc(64, 0, &midiInTransfers[0]);
     if (err != ESP_OK || midiInTransfers[0] == nullptr) {
+        lastError = "Fallback IN alloc failed (err=" + String(err) + ")";
+        if (useKnownDeviceFallback) {
+            usb_host_interface_release(clientHandle, deviceHandle, fallbackInterfaceNumber_);
+            midiInterfaceNumber = -1;
+            midiAlternateSetting_ = -1;
+        }
         return false;
     }
 
     midiInTransfers[0]->device_handle = deviceHandle;
-    midiInTransfers[0]->bEndpointAddress = 0x81;
+    midiInTransfers[0]->bEndpointAddress = fallbackInEndpoint;
     midiInTransfers[0]->callback = _onReceive;
     midiInTransfers[0]->context = this;
     midiInTransfers[0]->num_bytes = 64;
     interval = 1;
-    midiInEndpoint_ = 0x81;
+    midiInEndpoint_ = fallbackInEndpoint;
+
+    if (fallbackOutEndpoint != 0x00) {
+        err = usb_host_transfer_alloc(64, 0, &outTransfer);
+        if (err == ESP_OK && outTransfer != nullptr) {
+            outTransfer->device_handle = deviceHandle;
+            outTransfer->bEndpointAddress = fallbackOutEndpoint;
+            outTransfer->callback = _onSendComplete;
+            outTransfer->context = this;
+            outTransfer->num_bytes = 64;
+            midiOutEndpoint_ = fallbackOutEndpoint;
+        } else {
+            BRIDGE_LOG("[USB] Fallback OUT alloc failed (err=%d)\n", err);
+        }
+    }
+
     vendorByteStreamMode_ = _isKnownVendorMidiDevice();
     isReady = true;
 
     vTaskDelay(pdMS_TO_TICKS(200));
     usb_host_transfer_submit(midiInTransfers[0]);
-    BRIDGE_LOG_LN("[USB] Fallback connected on 0x81.");
+    BRIDGE_LOG("[USB] Fallback connected on IN 0x%02X OUT 0x%02X.\n",
+               midiInEndpoint_,
+               midiOutEndpoint_);
     return true;
 }
