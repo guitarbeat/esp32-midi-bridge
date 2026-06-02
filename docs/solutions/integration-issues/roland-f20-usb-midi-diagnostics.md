@@ -1,15 +1,16 @@
 # Roland F-20 USB MIDI diagnostics
 
 The Roland F-20 MIDI Implementation document (`F-20_MI.pdf`, Model F-20,
-Version 1.00) describes MIDI message behavior, not USB descriptors. Use it after
-USB enumeration works; it cannot explain a `No USB MIDI interface` display state
-by itself.
+Version 1.00; local copies belong under `local-artifacts/manuals/`) describes
+MIDI message behavior, not USB descriptors. Use it after USB enumeration works;
+it cannot explain a `No USB MIDI interface` display state by itself.
 
-The F-20 owner manual (`F-20_egfispd01_W.pdf`) is more useful for connection
-debugging: it distinguishes the **USB COMPUTER** port from the **USB MEMORY**
-port. The bridge must connect to **USB COMPUTER** with a USB-B device cable. The
-**USB MEMORY** port is for flash drives or the Roland wireless USB adapter, not
-for computer/host MIDI.
+The F-20 owner manual (`F-20_egfispd01_W.pdf`; local copies belong under
+`local-artifacts/manuals/`) is more useful for connection debugging: it
+distinguishes the **USB COMPUTER** port from the **USB MEMORY** port. The bridge
+must connect to **USB COMPUTER** with a USB-B device cable. The **USB MEMORY**
+port is for flash drives or the Roland wireless USB adapter, not for
+computer/host MIDI.
 
 ## Owner manual USB facts
 

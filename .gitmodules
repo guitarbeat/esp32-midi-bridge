@@ -1,4 +1,0 @@
-[submodule "vendor/ESP32_Host_MIDI"]
-	path = vendor/ESP32_Host_MIDI
-	url = https://github.com/sauloverissimo/ESP32_Host_MIDI.git
-	branch = main

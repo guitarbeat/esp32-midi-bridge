@@ -13,7 +13,9 @@ Everything an AI coding agent needs for this repo lives here and in the root-lev
 
 ## Skills
 
-Project-specific skills in `.agents/skills/`. Cursor and compatible agents discover these automatically.
+Project-specific skills live in `.agents/skills/`. Keep agent skills here rather
+than duplicating them in tool-specific folders; other agents should read this
+index and the root `AGENTS.md`.
 
 | Skill | Use when |
 |-------|----------|
@@ -21,9 +23,9 @@ Project-specific skills in `.agents/skills/`. Cursor and compatible agents disco
 | [gui-ascii-visualizer](skills/gui-ascii-visualizer/SKILL.md) | Preview display layouts or explore UI architecture alternatives |
 | [improve-codebase-architecture](skills/improve-codebase-architecture/SKILL.md) | Find deepening opportunities, refactor shallow modules |
 
-## Local docs (not in git)
+## Documentation
 
-The `docs/` directory is gitignored but may exist locally:
+Project documentation is tracked under `docs/`:
 
 - `docs/solutions/` — troubleshooting write-ups
 - `docs/superpowers/specs/` — design specs

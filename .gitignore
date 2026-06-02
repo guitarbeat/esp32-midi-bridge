@@ -23,12 +23,18 @@ site/*
 firmware/**/build/
 /build-s3/
 /diagnostics/
+/local-artifacts/
+/architecture-review*.html
+/web-flasher/
 
 # Claude Code
 CLAUDE.md
 
 # Cursor agent hooks (machine-local state)
 .cursor/hooks/state/
+
+# Tool-specific duplicated agent exports; canonical agent resources are in .agents/
+.gemini/
 
 # Legacy files (removed in v3.0.0)
 /displayhandler.h
@@ -39,9 +45,6 @@ CLAUDE.md
 /MIDI_PCM5102A_Handler.cpp
 /ESP32_PCM5102A_MIDI.h
 /ESP32_PCM5102A_MIDI.cpp
-
-# Internal research docs
-docs/
 
 # Local piano manuals used during hardware debugging
 /F-20_MI.pdf
