@@ -107,11 +107,11 @@ Key changes in `firmware/bridge-s3/Board.cpp`:
 - **Display init at 80 MHz** in `Board::begin()` only (LCD + buttons + backlight)
 - **Backlight GPIO 9 HIGH** after successful `display->begin()`
 - **GPIO 14** used only as MENU button input — not display power
-- **USB host rails** moved to `Board::enableUsbHostPower()` (500 ms stabilization delay), called from `USBConnection::begin()` after display and canvas are up — **not** in `Board::begin()`
+- **USB host rails** moved to `Board::enableUsbHostPower()` (500 ms stabilization delay), called from `UsbMidiHost::begin()` after display and canvas are up — **not** in `Board::begin()`
 
-### 5. UartConnection — move off USB Serial/JTAG pins
+### 5. UartMidiPort — move off USB Serial/JTAG pins
 
-Moved from GPIO 43/44 to **47 (TX) / 48 (RX)** with runtime guard in `UartConnection.cpp`. Wired in `bridge-s3.ino`. UART MIDI disabled by default (`uartEnabled_ = false` in `BridgeSettings.h`).
+Moved from GPIO 43/44 to **47 (TX) / 48 (RX)** with runtime guard in `UartMidiPort.cpp`. Wired in `bridge-s3.ino`. UART MIDI disabled by default (`uartEnabled_ = false` in `DeviceSettings.h`).
 
 ### 6. bridge-s3.ino — canvas and USB host startup
 

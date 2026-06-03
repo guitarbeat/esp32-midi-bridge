@@ -38,7 +38,7 @@ python3 read_serial.py            # close before flashing
 
 Do **not** enable PSRAM on the ESP32-S3-USB-OTG board.
 
-**Init order:** `Board::begin()` brings up the LCD only. USB host power rails (GPIO 12/13/17/18) run later in `Board::enableUsbHostPower()`, called from `USBConnection::begin()` after the canvas is ready. Enabling host rails inside `Board::begin()` caused a reboot loop right after `[LCD] display->begin OK`.
+**Init order:** `Board::begin()` brings up the LCD only. USB host power rails (GPIO 12/13/17/18) run later in `Board::enableUsbHostPower()`, called from `UsbMidiHost::begin()` after the canvas is ready. Enabling host rails inside `Board::begin()` caused a reboot loop right after `[LCD] display->begin OK`.
 
 When USB host mode is active, native USB CDC may stop. Enable Wi-Fi debug logging (see [docs/build.md](../../docs/build.md)) and run `python3 scripts/wifi_log.py`.
 

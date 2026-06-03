@@ -9,7 +9,7 @@ mode: repo-grounded
 
 ## Grounding Context
 
-**Codebase context:** Single-purpose **Piano BLE Bridge** (`firmware/bridge-s3/`) — ESP32-S3 USB host IN → BLE MIDI, 240×240 ST7789 UI, Bongo Cat animation, `BridgeUi` (mini keyboard, velocity, sustain, transport status, backlight dim), CI `.bin` artifacts, browser flasher, and classic ESP32+MAX3421E fallback. It uses a focused `Transport` architecture rather than porting the full `sauloverissimo/ESP32_Host_MIDI` hub.
+**Codebase context:** Single-purpose **Piano BLE Bridge** (`firmware/bridge-s3/`) — ESP32-S3 USB host IN → BLE MIDI, 240×240 ST7789 UI, Bongo Cat animation, `BridgeUi` (mini keyboard, velocity, sustain, transport status, backlight dim), CI `.bin` artifacts, browser flasher, and classic ESP32+MAX3421E fallback. It uses a focused `MidiMidiTransport` architecture rather than porting the full `sauloverissimo/ESP32_Host_MIDI` hub.
 
 **External context (GitHub):**
 
@@ -75,11 +75,11 @@ mode: repo-grounded
 
 ### 3. Show connected USB instrument name on the display
 
-**Description:** Read USB string descriptors during enumeration and show manufacturer/product on the status panel (`deviceName` exists in `USBConnection` but is never populated).
+**Description:** Read USB string descriptors during enumeration and show manufacturer/product on the status panel (`deviceName` exists in `UsbMidiHost` but is never populated).
 
 **Axis:** Display & feedback
 
-**Basis:** `direct:` `USBConnection.h` has `String deviceName` and README troubleshooting assumes users recognize *their* keyboard — field is unused in `USBConnection.cpp`.
+**Basis:** `direct:` `UsbMidiHost.h` has `String deviceName` and README troubleshooting assumes users recognize *their* keyboard — field is unused in `UsbMidiHost.cpp`.
 
 **Rationale:** High UX value on 240×240 when multiple keyboards are tested; matches MorrisMakes “last event + identity” display philosophy.
 
@@ -129,7 +129,7 @@ mode: repo-grounded
 
 **Complexity:** Medium
 
-**Status:** Shipped (`BridgeSettings` + BOOT multi-tap)
+**Status:** Shipped (`DeviceSettings` + BOOT multi-tap)
 
 ---
 

@@ -2,16 +2,16 @@
 #include <iostream>
 #include <vector>
 
-#include "../firmware/bridge-s3/MidiBridge.h"
-#include "../firmware/bridge-s3/MidiEngine.h"
+#include "../firmware/bridge-s3/src/midi/MidiBridge.h"
+#include "../firmware/bridge-s3/src/midi/MidiEngine.h"
 
-class FakeTransport : public Transport {
+class FakeTransport : public MidiTransport {
 public:
-    FakeTransport(const char* transportName, TransportKind transportKind)
+    FakeTransport(const char* transportName, MidiTransportKind transportKind)
         : name_(transportName), kind_(transportKind) {}
 
     const char* name() const override { return name_; }
-    TransportKind kind() const override { return kind_; }
+    MidiTransportKind kind() const override { return kind_; }
     bool isConnected() const override { return connected_; }
     bool canSend() const override { return connected_ && sendCapable_; }
 
@@ -33,7 +33,7 @@ public:
 
 private:
     const char* name_;
-    TransportKind kind_;
+    MidiTransportKind kind_;
     bool connected_ = false;
     bool sendCapable_ = true;
     bool sendOk_ = true;
@@ -41,7 +41,7 @@ private:
     int sendCount_ = 0;
 };
 
-static const MidiBridge::RouteStats& stats(const MidiBridge& bridge, TransportKind kind)
+static const MidiBridge::RouteStats& stats(const MidiBridge& bridge, MidiTransportKind kind)
 {
     return bridge.statsFor(kind);
 }
@@ -50,10 +50,10 @@ void testUsbBroadcastsToBleRtpUart()
 {
     MidiBridge bridge;
     MidiEngine engine;
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
-    FakeTransport rtp("RTP-MIDI", TransportKind::kRtp);
-    FakeTransport uart("UART-MIDI", TransportKind::kUart);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
+    FakeTransport rtp("RTP-MIDI", MidiTransportKind::kRtp);
+    FakeTransport uart("UART-MIDI", MidiTransportKind::kUart);
     usb.setConnected(true);
     ble.setConnected(true);
     rtp.setConnected(true);
@@ -71,10 +71,10 @@ void testUsbBroadcastsToBleRtpUart()
     assert(rtp.sendCount() == 1);
     assert(uart.sendCount() == 1);
     assert(usb.sendCount() == 0);
-    assert(stats(bridge, TransportKind::kUsbHost).received == 1);
-    assert(stats(bridge, TransportKind::kBle).sent == 1);
-    assert(stats(bridge, TransportKind::kRtp).sent == 1);
-    assert(stats(bridge, TransportKind::kUart).sent == 1);
+    assert(stats(bridge, MidiTransportKind::kUsbHost).received == 1);
+    assert(stats(bridge, MidiTransportKind::kBle).sent == 1);
+    assert(stats(bridge, MidiTransportKind::kRtp).sent == 1);
+    assert(stats(bridge, MidiTransportKind::kUart).sent == 1);
     std::cout << "testUsbBroadcastsToBleRtpUart passed!" << std::endl;
 }
 
@@ -82,8 +82,8 @@ void testReverseRoutesToUsbOnlyWhenUsbOutAvailable()
 {
     MidiBridge bridge;
     MidiEngine engine;
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
     usb.setConnected(true);
     usb.setSendCapable(false);
     ble.setConnected(true);
@@ -95,20 +95,20 @@ void testReverseRoutesToUsbOnlyWhenUsbOutAvailable()
     const uint8_t noteOn[] = {0x90, 64, 90};
     assert(bridge.route(&ble, noteOn, 3) == MidiBridge::Result::kFiltered);
     assert(usb.sendCount() == 0);
-    assert(stats(bridge, TransportKind::kUsbHost).skipped == 1);
+    assert(stats(bridge, MidiTransportKind::kUsbHost).skipped == 1);
 
     usb.setSendCapable(true);
     assert(bridge.route(&ble, noteOn, 3) == MidiBridge::Result::kForwarded);
     assert(usb.sendCount() == 1);
-    assert(stats(bridge, TransportKind::kUsbHost).sent == 1);
+    assert(stats(bridge, MidiTransportKind::kUsbHost).sent == 1);
     std::cout << "testReverseRoutesToUsbOnlyWhenUsbOutAvailable passed!" << std::endl;
 }
 
 void testSourceTransportNeverReceivesOwnMessage()
 {
     MidiBridge bridge;
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
     usb.setConnected(true);
     ble.setConnected(true);
     bridge.addTransport(&usb);
@@ -124,10 +124,10 @@ void testSourceTransportNeverReceivesOwnMessage()
 void testBleDisconnectedDoesNotBlockRtpOrUart()
 {
     MidiBridge bridge;
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
-    FakeTransport rtp("RTP-MIDI", TransportKind::kRtp);
-    FakeTransport uart("UART-MIDI", TransportKind::kUart);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
+    FakeTransport rtp("RTP-MIDI", MidiTransportKind::kRtp);
+    FakeTransport uart("UART-MIDI", MidiTransportKind::kUart);
     usb.setConnected(true);
     ble.setConnected(false);
     rtp.setConnected(true);
@@ -142,15 +142,15 @@ void testBleDisconnectedDoesNotBlockRtpOrUart()
     assert(ble.sendCount() == 0);
     assert(rtp.sendCount() == 1);
     assert(uart.sendCount() == 1);
-    assert(stats(bridge, TransportKind::kBle).skipped == 1);
+    assert(stats(bridge, MidiTransportKind::kBle).skipped == 1);
     std::cout << "testBleDisconnectedDoesNotBlockRtpOrUart passed!" << std::endl;
 }
 
 void testActiveSenseAndMidiClockFilteredByDefault()
 {
     MidiBridge bridge;
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
     usb.setConnected(true);
     ble.setConnected(true);
     bridge.addTransport(&usb);
@@ -169,8 +169,8 @@ void testActiveSenseAndMidiClockFilteredByDefault()
 void testShortVoiceMessagesRouteUnchanged()
 {
     MidiBridge bridge;
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
     usb.setConnected(true);
     ble.setConnected(true);
     bridge.addTransport(&usb);
@@ -194,9 +194,9 @@ void testChannelFilterAndTransposeApplyOnceBeforeBroadcast()
     MidiEngine engine;
     engine.setTranspose(2);
     engine.setChannelFilter(1);
-    FakeTransport usb("USB-HOST", TransportKind::kUsbHost);
-    FakeTransport ble("BLE-MIDI", TransportKind::kBle);
-    FakeTransport rtp("RTP-MIDI", TransportKind::kRtp);
+    FakeTransport usb("USB-HOST", MidiTransportKind::kUsbHost);
+    FakeTransport ble("BLE-MIDI", MidiTransportKind::kBle);
+    FakeTransport rtp("RTP-MIDI", MidiTransportKind::kRtp);
     usb.setConnected(true);
     ble.setConnected(true);
     rtp.setConnected(true);

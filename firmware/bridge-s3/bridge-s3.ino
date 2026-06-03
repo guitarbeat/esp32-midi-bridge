@@ -4,26 +4,26 @@
 #error "bridge-s3 requires an ESP32-S3 board with native USB-OTG host support."
 #endif
 
-#include "Board.h"
-#include "InputManager.h"
-#include "BridgeLog.h"
-#include "WifiDebugLog.h"
-#include "USBConnection.h"
-#include "BLEConnection.h"
-#include "UartConnection.h"
-#include "ConnectivityManager.h"
-#include "BridgeSystem.h"
-#include "MidiBridge.h"
-#include "BridgeUi.h"
-#include "BuildConfig.h"
+#include "src/hardware/Board.h"
+#include "src/input/ButtonInput.h"
+#include "src/network/BridgeLog.h"
+#include "src/network/WifiDebugLogger.h"
+#include "src/transports/usb/UsbMidiHost.h"
+#include "src/transports/ble/BleMidiPeripheral.h"
+#include "src/transports/uart/UartMidiPort.h"
+#include "src/network/NetworkMidiTransport.h"
+#include "src/app/BridgeController.h"
+#include "src/midi/MidiBridge.h"
+#include "src/ui/BridgeUi.h"
+#include "src/config/BuildConfig.h"
 
 // System Components — canvas allocated at static init (115 KB) while heap is clean.
 static Board* board = createBoard();
 static Arduino_Canvas* canvas = new Arduino_Canvas(240, 240, board->getDisplay());
 
-static USBConnection usbMidi;
-static BLEConnection bleMidi;
-static UartConnection uartMidi(Serial2, 48 /* RX */, 47 /* TX */);
+static UsbMidiHost usbMidi;
+static BleMidiPeripheral bleMidi;
+static UartMidiPort uartMidi(Serial2, 48 /* RX */, 47 /* TX */);
 
 #if ENABLE_BLE_DIAGNOSTICS
 static uint32_t lastBleDiagMs = 0;
@@ -65,7 +65,7 @@ void setup()
         delay(10);
     }
     Serial.println("\n[SYSTEM] Native USB CDC Serial connected. Booting...");
-    wifiDebugLogBegin();
+    wifiDebugLoggerBegin();
     
     // 1. Hardware Bootstrap
     if (!board->begin()) {
@@ -75,7 +75,7 @@ void setup()
     }
     
     // 2. System Controller (Brain)
-    bridgeSystem.begin();
+    bridgeController.begin();
     
     // 3. UI and Graphics framebuffer (panel already initialized in board->begin)
     Serial.println("[SYSTEM] Initializing display canvas...");
@@ -96,44 +96,44 @@ void setup()
     }
     
     // 4. Input Mapping
-    inputManager.mapButton("OK", board->getButtonPin("OK"));
-    inputManager.mapButton("UP", board->getButtonPin("UP"));
-    inputManager.mapButton("DOWN", board->getButtonPin("DOWN"));
-    inputManager.mapButton("MENU", board->getButtonPin("MENU"));
+    buttonInput.mapButton("OK", board->getButtonPin("OK"));
+    buttonInput.mapButton("UP", board->getButtonPin("UP"));
+    buttonInput.mapButton("DOWN", board->getButtonPin("DOWN"));
+    buttonInput.mapButton("MENU", board->getButtonPin("MENU"));
 
-    inputManager.onEvent("OK", [](InputManager::Event e){ 
-        if (e == InputManager::Event::kTap) bridgeUi.confirmUnifiedView();
-        else if (e == InputManager::Event::kLongHold) bridgeSystem.sendPanic();
+    buttonInput.onEvent("OK", [](ButtonInput::Event e){
+        if (e == ButtonInput::Event::kTap) bridgeUi.confirmUnifiedView();
+        else if (e == ButtonInput::Event::kLongHold) bridgeController.sendPanic();
     });
-    inputManager.onEvent("UP", [](InputManager::Event e){ 
-        if (e == InputManager::Event::kTap) bridgeSystem.stepTranspose(1); 
-        else if (e == InputManager::Event::kLongHold) bridgeSystem.cycleMidiChannel();
+    buttonInput.onEvent("UP", [](ButtonInput::Event e){
+        if (e == ButtonInput::Event::kTap) bridgeController.stepTranspose(1);
+        else if (e == ButtonInput::Event::kLongHold) bridgeController.cycleMidiChannel();
     });
-    inputManager.onEvent("DOWN", [](InputManager::Event e){ 
-        if (e == InputManager::Event::kTap) bridgeSystem.stepTranspose(-1); 
-        else if (e == InputManager::Event::kLongHold) connectivityManager.startProvisioning();
+    buttonInput.onEvent("DOWN", [](ButtonInput::Event e){
+        if (e == ButtonInput::Event::kTap) bridgeController.stepTranspose(-1);
+        else if (e == ButtonInput::Event::kLongHold) networkMidi.startProvisioning();
     });
-    inputManager.onEvent("MENU", [](InputManager::Event e){
-        if (e == InputManager::Event::kTap) bridgeSystem.cycleBacklightDim();
+    buttonInput.onEvent("MENU", [](ButtonInput::Event e){
+        if (e == ButtonInput::Event::kTap) bridgeController.cycleBacklightDim();
     });
 
     // 5. MIDI Hub Coordination
-    midiBridge.begin(&bridgeUi, []() { return bridgeSystem.isPaused(); });
-    midiBridge.setMidiEngine(&bridgeSystem.engine());
+    midiBridge.begin(&bridgeUi, []() { return bridgeController.isPaused(); });
+    midiBridge.setMidiEngine(&bridgeController.engine());
     midiBridge.addTransport(&usbMidi);
     midiBridge.addTransport(&bleMidi);
-    if (bridgeSystem.settings().uartEnabled()) {
+    if (bridgeController.settings().uartEnabled()) {
         midiBridge.addTransport(&uartMidi);
     }
-    midiBridge.addTransport(&connectivityManager);
+    midiBridge.addTransport(&networkMidi);
 
     // 6. Start Transports. BLE starts first so a central can subscribe before
     // USB host muxing disrupts native USB CDC or BLE connection setup.
-    bleMidi.begin(bridgeSystem.settings().bleDeviceName());
-    if (bridgeSystem.settings().uartEnabled()) {
-        uartMidi.begin(bridgeSystem.settings().uartBaudRate());
+    bleMidi.begin(bridgeController.settings().bleDeviceName());
+    if (bridgeController.settings().uartEnabled()) {
+        uartMidi.begin(bridgeController.settings().uartBaudRate());
     }
-    connectivityManager.begin();
+    networkMidi.begin();
     transportsStartedMs = millis();
 
     Serial.println("[SYSTEM] Deep Controller architecture initialized.");
@@ -145,13 +145,13 @@ void loop()
     
     // Periodic Maintenance
     board->task();
-    inputManager.task(now);
-    bridgeSystem.tick(now);
+    buttonInput.task(now);
+    bridgeController.tick(now);
     
     usbMidi.task();
     bleMidi.task();
     uartMidi.task();
-    connectivityManager.task();
+    networkMidi.task();
 
     if (bleMidi.isSubscribed() && bleSubscribedAtMs == 0) {
         bleSubscribedAtMs = now;
@@ -199,12 +199,12 @@ void loop()
         BridgeUiDiagnostics diag;
         diag.usb = &usbMidi;
         diag.ble = &bleMidi;
-        diag.usbStats = toUiStats(midiBridge.statsFor(TransportKind::kUsbHost));
-        diag.bleStats = toUiStats(midiBridge.statsFor(TransportKind::kBle));
-        diag.rtpStats = toUiStats(midiBridge.statsFor(TransportKind::kRtp));
-        diag.uartStats = toUiStats(midiBridge.statsFor(TransportKind::kUart));
-        diag.rtpConnected = connectivityManager.hasRtpSession();
-        diag.uartEnabled = bridgeSystem.settings().uartEnabled();
+        diag.usbStats = toUiStats(midiBridge.statsFor(MidiTransportKind::kUsbHost));
+        diag.bleStats = toUiStats(midiBridge.statsFor(MidiTransportKind::kBle));
+        diag.rtpStats = toUiStats(midiBridge.statsFor(MidiTransportKind::kRtp));
+        diag.uartStats = toUiStats(midiBridge.statsFor(MidiTransportKind::kUart));
+        diag.rtpConnected = networkMidi.hasRtpSession();
+        diag.uartEnabled = bridgeController.settings().uartEnabled();
         bridgeUi.setDiagnostics(diag);
         bridgeUi.refresh(now);
         canvas->flush();

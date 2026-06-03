@@ -15,7 +15,7 @@
 #include <usbh_midi.h>
 #include <usbhub.h>
 
-#include "BLEConnection.h"
+#include "src/ble/BleMidiPeripheral.h"
 
 #ifndef BLE_DEVICE_NAME_TEXT
 #define BLE_DEVICE_NAME_TEXT "Piano BLE Bridge"
@@ -27,7 +27,7 @@ static const uint32_t SERIAL_BAUD = 115200;
 USB Usb;
 USBHub Hub(&Usb);
 USBH_MIDI Midi(&Usb);
-BLEConnection bleMidi;
+BleMidiPeripheral bleMidi;
 
 static uint32_t midiMessagesSeen = 0;
 static uint32_t bleMessagesSent = 0;

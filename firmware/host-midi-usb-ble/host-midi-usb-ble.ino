@@ -1,14 +1,14 @@
 // ESP32_Host_MIDI USB host -> BLE with on-screen diagnostics (ESP32-S3-USB-OTG).
 #include <Arduino.h>
 #include <ESP32_Host_MIDI.h>
-#include <USBConnection.h>
-#include <BLEConnection.h>
+#include <UsbMidiHost.h>
+#include <BleMidiPeripheral.h>
 
-#include "Board.h"
-#include "DiagDisplay.h"
+#include "src/hardware/Board.h"
+#include "src/ui/DiagnosticDisplay.h"
 
-USBConnection usbHost;
-BLEConnection bleHost;
+UsbMidiHost usbHost;
+BleMidiPeripheral bleHost;
 
 static Board* board = createBoard();
 static Arduino_Canvas* canvas = nullptr;
@@ -57,7 +57,7 @@ static void forwardUsbToBle(const uint8_t* raw, size_t rawLen, const uint8_t* mi
     if (!bleHost.isConnected()) {
         gBleOutSkip++;
         strncpy(gLastResult, "BLE not linked", sizeof(gLastResult) - 1);
-        diagDisplay.pushLog(eventLine, RGB565_ORANGE);
+        diagnosticDisplay.pushLog(eventLine, RGB565_ORANGE);
         return;
     }
 
@@ -72,11 +72,11 @@ static void forwardUsbToBle(const uint8_t* raw, size_t rawLen, const uint8_t* mi
     if (bleHost.sendMidiMessage(out, outLen)) {
         gBleOutOk++;
         strncpy(gLastResult, "sent BLE", sizeof(gLastResult) - 1);
-        diagDisplay.pushLog(eventLine, RGB565_LIME);
+        diagnosticDisplay.pushLog(eventLine, RGB565_LIME);
     } else {
         gBleOutSkip++;
         strncpy(gLastResult, "BLE send fail", sizeof(gLastResult) - 1);
-        diagDisplay.pushLog(eventLine, RGB565_RED);
+        diagnosticDisplay.pushLog(eventLine, RGB565_RED);
     }
 }
 
@@ -96,9 +96,9 @@ void setup() {
     canvas = new Arduino_Canvas(240, 240, board->getDisplay());
     if (canvas != nullptr && canvas->begin(GFX_SKIP_OUTPUT_BEGIN)) {
         board->setBacklight(255);
-        diagDisplay.begin(canvas);
-        diagDisplay.pushLog("Display OK", RGB565_CYAN);
-        diagDisplay.refresh(millis());
+        diagnosticDisplay.begin(canvas);
+        diagnosticDisplay.pushLog("Display OK", RGB565_CYAN);
+        diagnosticDisplay.refresh(millis());
         canvas->flush();
         Serial.println("[HostMIDI] Display ready");
     }
@@ -106,18 +106,18 @@ void setup() {
     midiHandler.addTransport(&usbHost);
     if (!usbHost.begin()) {
         Serial.println("[HostMIDI] USB host init failed");
-        diagDisplay.pushLog("USB init FAIL", RGB565_RED);
+        diagnosticDisplay.pushLog("USB init FAIL", RGB565_RED);
     } else {
         board->enableUsbHostPower();
         Serial.println("[HostMIDI] USB host + power rails OK");
-        diagDisplay.pushLog("USB host OK", RGB565_LIME);
+        diagnosticDisplay.pushLog("USB host OK", RGB565_LIME);
     }
 
     bleHost.begin("Piano BLE Bridge");
     midiHandler.setRawMidiCallback(forwardUsbToBle);
     midiHandler.begin();
 
-    diagDisplay.pushLog("BLE: Piano BLE Bridge", RGB565_CYAN);
+    diagnosticDisplay.pushLog("BLE: Piano BLE Bridge", RGB565_CYAN);
     Serial.println("[HostMIDI] Ready");
 }
 
@@ -125,7 +125,7 @@ void loop() {
     const uint32_t now = millis();
     midiHandler.task();
 
-    DiagStats stats;
+    DiagnosticStats stats;
     stats.usbIn = gUsbIn;
     stats.bleOutOk = gBleOutOk;
     stats.bleOutSkip = gBleOutSkip;
@@ -133,10 +133,10 @@ void loop() {
     stats.bleConnected = bleHost.isConnected();
     strncpy(stats.lastEvent, gLastEvent, sizeof(stats.lastEvent) - 1);
     strncpy(stats.lastResult, gLastResult, sizeof(stats.lastResult) - 1);
-    diagDisplay.setStats(stats);
+    diagnosticDisplay.setStats(stats);
 
     if (canvas != nullptr) {
-        diagDisplay.refresh(now);
+        diagnosticDisplay.refresh(now);
         canvas->flush();
     }
 

@@ -48,10 +48,10 @@ Primary sketch for ESP32-S3 boards with USB-OTG host.
 - `bridge-s3.ino`: Shallow coordinator — delegates to deep modules.
 - `Board.cpp/h`: Display, buttons, battery; `enableUsbHostPower()` for USB-OTG rails.
 - `BridgeUi.cpp/h`: Display rendering and visual feedback.
-- `USBConnection.cpp/h`: USB MIDI host stack (dedicated core-0 task, dual IN pipes, queued OUT).
-- `BLEConnection.cpp/h`: Bluetooth LE MIDI peripheral.
-- `MidiBridge.cpp/h`: Transport hub — routes MIDI between USB, BLE, RTP, UART.
-- `WifiDebugLog.cpp/h`: Optional UDP debug logging when `ENABLE_WIFI_DEBUG=1`.
+- `src/transports/usb/UsbMidiHost.*`: USB MIDI host stack (dedicated core-0 task, dual IN pipes, queued OUT).
+- `src/transports/ble/BleMidiPeripheral.*`: Bluetooth LE MIDI peripheral.
+- `MidiBridge.cpp/h`: MidiTransport hub — routes MIDI between USB, BLE, RTP, UART.
+- `src/network/WifiDebugLogger.*`: Optional UDP debug logging when `ENABLE_WIFI_DEBUG=1`.
 - `BridgeLog.h`: `BRIDGE_LOG` / `BRIDGE_LOG_LN` — Serial + optional Wi-Fi mirror.
 - `animation/`: Bongo Cat animation engine.
 
@@ -67,7 +67,7 @@ Primary sketch for ESP32-S3 boards with USB-OTG host.
 - **Memory**: 240×240 canvas @ 16bpp ≈ 115 KB — allocated statically at boot; no PSRAM on USB-OTG board.
 - **Logging**: Prefer `BRIDGE_LOG` in USB/BLE/SYSTEM paths so Wi-Fi debug receives them when enabled.
 - **GPIO 43/44**: USB Serial/JTAG only — never UART MIDI. Default UART pins: 47 TX / 48 RX.
-- **Init order**: `Board::begin()` brings up the LCD only. USB host power rails run later in `Board::enableUsbHostPower()`, called from `USBConnection::begin()`.
+- **Init order**: `Board::begin()` brings up the LCD only. USB host power rails run later in `Board::enableUsbHostPower()`, called from `UsbMidiHost::begin()`.
 
 ## Documentation
 
@@ -94,9 +94,9 @@ Do not claim flash/display/USB fixes work without runtime evidence: successful u
 - Flash uploads fail around 80–280 KB when another process holds `/dev/cu.usbmodem*`; close serial tools before flashing.
 - After upload the chip may stay in download mode; press RESET once or use `verify-boot.sh` / `read_serial.py --reset`.
 - GPIO 43/44 are USB Serial/JTAG — must not be used for UART MIDI (default: 47 TX / 48 RX).
-- Display init in `Board::begin()` runs before USB host; host rails enabled in `USBConnection::begin()` via `Board::enableUsbHostPower()`.
+- Display init in `Board::begin()` runs before USB host; host rails enabled in `UsbMidiHost::begin()` via `Board::enableUsbHostPower()`.
 - Healthy boot logs: `[LCD] display->begin OK`, `[SYSTEM] Display canvas initialized`.
 - After USB host mux (GPIO 18 HIGH), CDC may stop — use `ENABLE_WIFI_DEBUG=1` and `BRIDGE_LOG` + `wifi_log.py`.
 - USB host VBUS for keyboard needs 5 V on Type-A port via **USB_DEV**; board power alone may not enumerate the piano.
 - LCD enable GPIO 5 (LOW); backlight GPIO 9.
-- USB stack credits: Saulo Veríssimo, touchgadget, Omocha (enudenki) — patterns in `USBConnection`, not a library dependency.
+- USB stack credits: Saulo Veríssimo, touchgadget, Omocha (enudenki) — patterns in `UsbMidiHost`, not a library dependency.

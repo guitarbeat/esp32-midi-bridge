@@ -5,7 +5,7 @@
 
 ## Summary
 
-One milestone covering flash/boot verification tooling, USB host MIDI re-enablement, Wi-Fi UDP debug logging, and Omocha-inspired USB transport hardening — without replacing the existing `Transport` architecture.
+One milestone covering flash/boot verification tooling, USB host MIDI re-enablement, Wi-Fi UDP debug logging, and Omocha-inspired USB transport hardening — without replacing the existing `MidiMidiTransport` architecture.
 
 ## Problem
 
@@ -23,11 +23,11 @@ flowchart TB
   end
   subgraph runtime [Runtime]
     Board[Board.enableUsbHostPower] --> HostPort[Type-A Host]
-    USBConn[USBConnection] --> HostPort
+    USBConn[UsbMidiHost] --> HostPort
     USBConn --> MidiBridge[MidiBridge]
-    MidiBridge --> BLE[BLEConnection]
+    MidiBridge --> BLE[BleMidiPeripheral]
     BRIDGE_LOG[BRIDGE_LOG macro] --> CDC
-    BRIDGE_LOG --> WifiUDP[WifiDebugLog UDP :3333]
+    BRIDGE_LOG --> WifiUDP[WifiDebugLogger UDP :3333]
   end
 ```
 
@@ -40,18 +40,18 @@ flowchart TB
 
 ## Phase 2 — USB host MIDI
 
-- `Board::enableUsbHostPower()` moved out of display init; called from `USBConnection::begin()` after `usb_host_install`.
+- `Board::enableUsbHostPower()` moved out of display init; called from `UsbMidiHost::begin()` after `usb_host_install`.
 - `usbMidi.begin(board)` restored in `bridge-s3.ino`.
 
 ## Phase 3 — Wi-Fi debug
 
-- `WifiDebugLog.h/.cpp` with `ENABLE_WIFI_DEBUG` (default 0 in `RTPMidiConfig.h`).
+- `WifiDebugLogger.h/.cpp` with `ENABLE_WIFI_DEBUG` (default 0 in `NetworkConfig.h`).
 - `BridgeLog.h` — `BRIDGE_LOG` / `BRIDGE_LOG_LN` mirror to Serial + UDP broadcast on port 3333 when Wi-Fi STA is up.
 - `scripts/wifi_log.py` — host-side receiver.
 
 ## Phase 4 — Omocha cherry-picks
 
-Applied to `USBConnection` (MIT attribution in file header):
+Applied to `UsbMidiHost` (MIT attribution in file header):
 
 | Pattern | Implementation |
 |---------|----------------|
@@ -72,7 +72,7 @@ python3 scripts/wifi_log.py
 
 ## Out of scope
 
-- Replacing `USBConnection` with external Omocha library
+- Replacing `UsbMidiHost` with external Omocha library
 - OTA / UI changes beyond existing toast paths
 
 ## References

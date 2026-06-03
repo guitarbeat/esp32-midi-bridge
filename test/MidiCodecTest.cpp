@@ -1,7 +1,7 @@
 #include <iostream>
 #include <cassert>
 #include <cstring>
-#include "../firmware/bridge-s3/MidiCodec.h"
+#include "../firmware/bridge-s3/src/midi/MidiCodec.h"
 
 void testLengthFromStatus() {
     assert(MidiCodec::lengthFromStatus(0x90) == 3); // Note On

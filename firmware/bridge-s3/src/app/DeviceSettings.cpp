@@ -1,0 +1,182 @@
+#include "DeviceSettings.h"
+
+#include <Preferences.h>
+
+DeviceSettings deviceSettings;
+
+namespace {
+
+constexpr char kNamespace[] = "piano_ble";
+constexpr char kKeyBleName[] = "ble_name";
+constexpr char kKeyDimMs[] = "dim_ms";
+constexpr char kKeyTranspose[] = "transpose";
+constexpr char kKeyChannel[] = "channel";
+constexpr char kKeyUartEnable[] = "uart_en";
+constexpr char kKeyUartBaud[] = "uart_baud";
+constexpr uint32_t kSchemaVersion = 1;
+constexpr char kKeySchema[] = "schema";
+
+}  // namespace
+
+bool DeviceSettings::begin(const char* defaultBleName)
+{
+    if (defaultBleName != nullptr) {
+        strncpy(bleName_, defaultBleName, kBleNameMax);
+        bleName_[kBleNameMax] = '\0';
+    }
+    load();
+    return true;
+}
+
+void DeviceSettings::load()
+{
+    Preferences prefs;
+    if (!prefs.begin(kNamespace, true)) {
+        return;
+    }
+
+    const uint32_t schema = prefs.getUInt(kKeySchema, 0);
+    if (schema != kSchemaVersion) {
+        prefs.end();
+        saveAll();
+        return;
+    }
+
+    const String name = prefs.getString(kKeyBleName, bleName_);
+    strncpy(bleName_, name.c_str(), kBleNameMax);
+    bleName_[kBleNameMax] = '\0';
+
+    backlightDimMs_ = prefs.getUInt(kKeyDimMs, backlightDimMs_);
+    transpose_ = static_cast<int8_t>(prefs.getChar(kKeyTranspose, transpose_));
+    midiChannel_ = prefs.getUChar(kKeyChannel, midiChannel_);
+    uartEnabled_ = prefs.getBool(kKeyUartEnable, uartEnabled_);
+    uartBaudRate_ = prefs.getUInt(kKeyUartBaud, uartBaudRate_);
+
+    if (transpose_ < kTransposeMin || transpose_ > kTransposeMax) {
+        transpose_ = 0;
+    }
+    if (midiChannel_ > 16) {
+        midiChannel_ = 0;
+    }
+
+    prefs.end();
+}
+
+void DeviceSettings::saveAll()
+{
+    Preferences prefs;
+    if (!prefs.begin(kNamespace, false)) {
+        return;
+    }
+
+    prefs.putUInt(kKeySchema, kSchemaVersion);
+    prefs.putString(kKeyBleName, bleName_);
+    prefs.putUInt(kKeyDimMs, backlightDimMs_);
+    prefs.putChar(kKeyTranspose, transpose_);
+    prefs.putUChar(kKeyChannel, midiChannel_);
+    prefs.putBool(kKeyUartEnable, uartEnabled_);
+    prefs.putUInt(kKeyUartBaud, uartBaudRate_);
+    prefs.end();
+}
+
+void DeviceSettings::stepTranspose(int8_t delta)
+{
+    const int next = static_cast<int>(transpose_) + static_cast<int>(delta);
+    if (next < kTransposeMin || next > kTransposeMax) {
+        return;
+    }
+    const int8_t newVal = static_cast<int8_t>(next);
+    if (transpose_ == newVal) return;
+    
+    transpose_ = newVal;
+    saveAll();
+    Serial.printf("[SETTINGS] Transpose %+d semitones\n", transpose_);
+}
+
+void DeviceSettings::cycleTranspose()
+{
+    int8_t next = transpose_ + 1;
+    if (next > kTransposeMax) {
+        next = kTransposeMin;
+    }
+    if (transpose_ == next) return;
+    
+    transpose_ = next;
+    saveAll();
+    Serial.printf("[SETTINGS] Transpose %+d semitones\n", transpose_);
+}
+
+void DeviceSettings::cycleMidiChannelFilter()
+{
+    uint8_t next = midiChannel_ + 1;
+    if (next > 16) {
+        next = 0;
+    }
+    if (midiChannel_ == next) return;
+
+    midiChannel_ = next;
+    saveAll();
+    if (midiChannel_ == 0) {
+        Serial.println("[SETTINGS] MIDI channel filter: all");
+    } else {
+        Serial.printf("[SETTINGS] MIDI channel filter: ch%u only\n", midiChannel_);
+    }
+}
+
+void DeviceSettings::cycleBacklightDim()
+{
+    static const uint32_t kPresets[] = {30000, 90000, 180000, 0};
+    constexpr size_t kPresetCount = sizeof(kPresets) / sizeof(kPresets[0]);
+    size_t next = 0;
+    for (size_t i = 0; i < kPresetCount; i++) {
+        if (kPresets[i] == backlightDimMs_) {
+            next = (i + 1) % kPresetCount;
+            break;
+        }
+    }
+    backlightDimMs_ = kPresets[next];
+    saveAll();
+    if (backlightDimMs_ == 0) {
+        Serial.println("[SETTINGS] Backlight dim: never");
+    } else {
+        Serial.printf("[SETTINGS] Backlight dim: %lus idle\n", backlightDimMs_ / 1000);
+    }
+}
+
+void DeviceSettings::toggleUart()
+{
+    uartEnabled_ = !uartEnabled_;
+    saveAll();
+    Serial.printf("[SETTINGS] UART MIDI %s (reboot to apply)\n", uartEnabled_ ? "Enabled" : "Disabled");
+}
+
+void DeviceSettings::cycleUartBaudRate()
+{
+    if (uartBaudRate_ == 31250) {
+        uartBaudRate_ = 115200;
+    } else {
+        uartBaudRate_ = 31250;
+    }
+    saveAll();
+    Serial.printf("[SETTINGS] UART Baud Rate: %u (reboot to apply)\n", uartBaudRate_);
+}
+
+void DeviceSettings::printSummary() const
+{
+    Serial.println("[SETTINGS] ---");
+    Serial.printf("  BLE name: %s (reboot to apply if changed)\n", bleName_);
+    Serial.printf("  Transpose: %+d\n", transpose_);
+    if (midiChannel_ == 0) {
+        Serial.println("  MIDI channel: all");
+    } else {
+        Serial.printf("  MIDI channel: ch%u only\n", midiChannel_);
+    }
+    if (backlightDimMs_ == 0) {
+        Serial.println("  Backlight dim: never");
+    } else {
+        Serial.printf("  Backlight dim: %lus idle\n", backlightDimMs_ / 1000);
+    }
+    Serial.println("  Display view: unified");
+    Serial.printf("  UART MIDI: %s at %u baud\n", uartEnabled_ ? "ON" : "OFF", uartBaudRate_);
+    Serial.println("[SETTINGS] Buttons: UP/DOWN=transpose, MENU=ch, MENU hold=dim/wifi, OK=view, OK hold=panic/pause");
+}

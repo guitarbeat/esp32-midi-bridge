@@ -319,7 +319,7 @@ arduino-cli compile \
 Enabled by default. Routes USB MIDI to **RTP-MIDI on port 5004** while BLE stays active, and accepts inbound RTP-MIDI short messages as another bridge source. Uses the [AppleMIDI](https://github.com/lathoub/Arduino-AppleMidi-Library) library.
 
 1. Install: `arduino-cli lib install AppleMIDI`
-2. Flash firmware (RTP is on unless you set `ENABLE_RTP_MIDI` to `0` in `RTPMidiConfig.h`).
+2. Flash firmware (RTP is on unless you set `ENABLE_RTP_MIDI` to `0` in `NetworkConfig.h`).
 3. **First-time WiFi setup** (no credentials saved yet, or saved network unreachable):
    - The board opens a setup WiFi network named **`Piano-BLE-Bridge-Setup`** (spaces in the BLE name become dashes).
    - On your phone or laptop, join that network (open / no password).
@@ -333,7 +333,7 @@ Optional compile-time fallback (skips the portal on first boot if NVS is empty):
 Wi-Fi uses DHCP. RTP forwards only after a host connects to the RTP session.
 Inbound RTP-MIDI handles Note On/Off, CC, Program Change, Channel Pressure, Pitch Bend, and Start/Stop/Continue.
 
-To disable RTP-MIDI (BLE-only build), set `#define ENABLE_RTP_MIDI 0` in `RTPMidiConfig.h`.
+To disable RTP-MIDI (BLE-only build), set `#define ENABLE_RTP_MIDI 0` in `NetworkConfig.h`.
 
 ### Over-the-air (OTA) firmware updates
 
@@ -373,7 +373,7 @@ Optional OTA password: copy `ota_secrets.example.h` to `ota_secrets.h` and set `
 OTA_PASSWORD_TEXT='YourPassword' ./scripts/flash-bridge-s3-ota.sh 192.168.1.42
 ```
 
-Disable OTA with `#define ENABLE_OTA 0` in `RTPMidiConfig.h` (RTP/BLE still work).
+Disable OTA with `#define ENABLE_OTA 0` in `NetworkConfig.h` (RTP/BLE still work).
 
 **Note:** The first flash after adding OTA still needs USB once. After that, use OTA for routine updates.
 
@@ -416,11 +416,11 @@ If the board disappears from `/dev/cu.*` after USB host firmware runs:
 
 ### Boot reboot loop after `[LCD] display->begin OK`
 
-Serial repeats `ESP-ROM` and never reaches `[SYSTEM] Display canvas initialized.` — usually USB host rails were enabled inside `Board::begin()`. Current firmware defers them to `enableUsbHostPower()` (called from `USBConnection::begin()` after canvas init). Reflash with `./scripts/flash-bridge-s3.sh` and verify with `./scripts/verify-boot.sh`.
+Serial repeats `ESP-ROM` and never reaches `[SYSTEM] Display canvas initialized.` — usually USB host rails were enabled inside `Board::begin()`. Current firmware defers them to `enableUsbHostPower()` (called from `UsbMidiHost::begin()` after canvas init). Reflash with `./scripts/flash-bridge-s3.sh` and verify with `./scripts/verify-boot.sh`.
 
 ## USB host power pins (ESP32-S3-USB-OTG)
 
-`USBConnection::begin()` calls `Board::enableUsbHostPower()` after `usb_host_install`:
+`UsbMidiHost::begin()` calls `Board::enableUsbHostPower()` after `usb_host_install`:
 
 | GPIO | Role |
 | --- | --- |

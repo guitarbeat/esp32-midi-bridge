@@ -2,7 +2,7 @@
 #include <cstring>
 #include <iostream>
 
-#include "../firmware/bridge-s3/MidiEngine.h"
+#include "../firmware/bridge-s3/src/midi/MidiEngine.h"
 
 void testChannelFilterUsesStatusChannel() {
     MidiEngine engine;
